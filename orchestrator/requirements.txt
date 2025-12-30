@@ -1,0 +1,74 @@
+# FastAPI and ASGI server
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Database
+sqlalchemy==2.0.25
+alembic==1.13.1
+psycopg2-binary==2.9.9
+asyncpg==0.29.0
+
+# Cache and Queue
+redis==5.0.1
+celery==5.3.6
+
+# Validation and Settings
+pydantic==2.5.3
+pydantic-settings==2.1.0
+email-validator==2.1.0
+
+# Authentication and Security
+python-jose[cryptography]==3.3.0
+passlib[argon2]==1.7.4
+argon2-cffi==23.1.0
+cryptography==42.0.0
+pyjwt==2.8.0
+
+# HTTP Clients
+aiohttp==3.9.1
+httpx==0.26.0
+requests==2.31.0
+
+# Network Discovery
+aiozeroconf==0.1.5
+zeroconf==0.131.0
+
+# GitHub Integration
+PyGithub==2.1.1
+gitpython==3.1.40
+
+# WebSocket
+websockets==12.0
+
+# AI Integration (OpenRouter/Deepseek)
+openai==1.6.1
+
+# Monitoring
+prometheus-client==0.19.0
+
+# YAML Processing
+pyyaml==6.0.1
+ruamel.yaml==0.18.5
+
+# SSH and File Transfer
+paramiko==3.4.0
+asyncssh==2.14.1
+
+# Utilities
+aiofiles==23.2.1
+python-dotenv==1.0.0
+tenacity==8.2.3
+pytz==2023.3
+cron-descriptor==1.4.0
+APScheduler==3.10.4
+
+# Object Storage
+minio==7.2.3
+
+# Data Validation
+python-dateutil==2.8.2
+validators==0.22.0
+
+# Logging
+loguru==0.7.2

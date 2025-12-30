@@ -1,0 +1,396 @@
+"""Deepseek AI integration service."""
+
+import logging
+from typing import Dict, List, Optional
+
+import aiohttp
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import get_settings
+from app.models.ai_conversation import AIConversation, AIMessage
+from app.models.server import Server
+from app.models.deployment import Deployment
+from app.utils.logging import log_integration_event
+
+settings = get_settings()
+logger = logging.getLogger(__name__)
+
+
+class DeepseekAI:
+    """Service for Deepseek AI integration."""
+
+    API_BASE_URL = "https://api.deepseek.com/v1"
+
+    def __init__(self, db: AsyncSession, api_key: Optional[str] = None):
+        """
+        Initialize Deepseek AI service.
+
+        Args:
+            db: Database session
+            api_key: Deepseek API key (optional, uses settings if not provided)
+        """
+        self.db = db
+        self.api_key = api_key or settings.deepseek_api_key
+
+    async def create_chat_completion(
+        self,
+        messages: List[Dict[str, str]],
+        model: str = "deepseek-chat",
+        temperature: float = 0.7,
+        max_tokens: int = 2000,
+        stream: bool = False,
+    ) -> Dict:
+        """
+        Create a chat completion with Deepseek API.
+
+        Args:
+            messages: List of message dictionaries with role and content
+            model: Model to use
+            temperature: Sampling temperature (0-2)
+            max_tokens: Maximum tokens to generate
+            stream: Whether to stream the response
+
+        Returns:
+            Dict: API response
+        """
+        try:
+            async with aiohttp.ClientSession() as session:
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                }
+
+                payload = {
+                    "model": model,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "stream": stream,
+                }
+
+                async with session.post(
+                    f"{self.API_BASE_URL}/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=60),
+                ) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        log_integration_event(
+                            "Deepseek",
+                            "chat_completion",
+                            True,
+                            {
+                                "model": model,
+                                "tokens": result.get("usage", {}).get("total_tokens", 0),
+                            },
+                        )
+                        return result
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"Deepseek API error: {response.status} - {error_text}")
+                        log_integration_event(
+                            "Deepseek",
+                            "chat_completion",
+                            False,
+                            {"error": f"HTTP {response.status}"},
+                        )
+                        return None
+
+        except Exception as e:
+            logger.exception(f"Failed to create chat completion: {e}")
+            log_integration_event("Deepseek", "chat_completion", False, {"error": str(e)})
+            return None
+
+    async def chat(
+        self,
+        conversation_id: int,
+        user_message: str,
+        include_context: bool = True,
+    ) -> Optional[AIMessage]:
+        """
+        Send a chat message and get AI response.
+
+        Args:
+            conversation_id: Conversation ID
+            user_message: User's message
+            include_context: Whether to include HA context
+
+        Returns:
+            Optional[AIMessage]: AI response message
+        """
+        try:
+            # Get conversation
+            result = await self.db.execute(
+                select(AIConversation).where(AIConversation.id == conversation_id)
+            )
+            conversation = result.scalar_one_or_none()
+
+            if not conversation:
+                logger.error(f"Conversation {conversation_id} not found")
+                return None
+
+            # Get conversation history
+            messages_result = await self.db.execute(
+                select(AIMessage)
+                .where(AIMessage.conversation_id == conversation_id)
+                .order_by(AIMessage.created_at)
+            )
+            history = list(messages_result.scalars().all())
+
+            # Build messages for API
+            api_messages = []
+
+            # Add system prompt
+            system_prompt = await self._build_system_prompt(conversation, include_context)
+            api_messages.append({"role": "system", "content": system_prompt})
+
+            # Add conversation history (last 10 messages to stay within context)
+            for msg in history[-10:]:
+                api_messages.append({"role": msg.role, "content": msg.content})
+
+            # Add user message
+            api_messages.append({"role": "user", "content": user_message})
+
+            # Save user message
+            user_msg = AIMessage(
+                conversation_id=conversation_id,
+                role="user",
+                content=user_message,
+            )
+            self.db.add(user_msg)
+            await self.db.commit()
+
+            # Get AI response
+            response = await self.create_chat_completion(
+                messages=api_messages,
+                model=conversation.model,
+                temperature=conversation.temperature,
+                max_tokens=conversation.max_tokens,
+            )
+
+            if not response:
+                return None
+
+            # Extract response data
+            choice = response.get("choices", [{}])[0]
+            assistant_content = choice.get("message", {}).get("content", "")
+            usage = response.get("usage", {})
+
+            # Save assistant message
+            assistant_msg = AIMessage(
+                conversation_id=conversation_id,
+                role="assistant",
+                content=assistant_content,
+                model=response.get("model"),
+                prompt_tokens=usage.get("prompt_tokens"),
+                completion_tokens=usage.get("completion_tokens"),
+                total_tokens=usage.get("total_tokens"),
+                finish_reason=choice.get("finish_reason"),
+            )
+            self.db.add(assistant_msg)
+
+            # Update conversation
+            conversation.last_message_at = assistant_msg.created_at
+            conversation.message_count += 2  # User + assistant
+
+            await self.db.commit()
+            await self.db.refresh(assistant_msg)
+
+            return assistant_msg
+
+        except Exception as e:
+            logger.exception(f"Failed to send chat message: {e}")
+            return None
+
+    async def _build_system_prompt(
+        self, conversation: AIConversation, include_context: bool = True
+    ) -> str:
+        """
+        Build system prompt with context.
+
+        Args:
+            conversation: Conversation object
+            include_context: Whether to include HA context
+
+        Returns:
+            str: System prompt
+        """
+        base_prompt = """You are an expert Home Assistant configuration assistant integrated into the HA Config Manager system.
+
+Your role is to help users with:
+- Home Assistant configuration and troubleshooting
+- YAML syntax and best practices
+- Automation creation and optimization
+- Integration setup and configuration
+- Performance optimization
+- Security best practices
+- WLED device configuration
+- Falcon Player (FPP) setup for Christmas lights
+- Tailscale VPN configuration
+
+Provide clear, accurate, and actionable advice. When suggesting configurations, always provide complete, working examples in YAML format with proper indentation.
+
+Be concise but thorough. If you're unsure about something, say so rather than guessing."""
+
+        if not include_context:
+            return base_prompt
+
+        # Add context based on conversation type
+        context_parts = [base_prompt]
+
+        # Add server context
+        if conversation.server_id:
+            server_result = await self.db.execute(
+                select(Server).where(Server.id == conversation.server_id)
+            )
+            server = server_result.scalar_one_or_none()
+            if server:
+                context_parts.append(f"\n\nContext: User is asking about server '{server.name}' (Host: {server.host})")
+                if server.ha_version:
+                    context_parts.append(f"Home Assistant Version: {server.ha_version}")
+
+        # Add deployment context
+        if conversation.deployment_id:
+            deployment_result = await self.db.execute(
+                select(Deployment).where(Deployment.id == conversation.deployment_id)
+            )
+            deployment = deployment_result.scalar_one_or_none()
+            if deployment:
+                context_parts.append(
+                    f"\n\nContext: User is asking about deployment #{deployment.id} (Status: {deployment.status})"
+                )
+                if deployment.error_message:
+                    context_parts.append(f"Error: {deployment.error_message}")
+
+        return "\n".join(context_parts)
+
+    async def generate_automation_suggestion(
+        self,
+        description: str,
+        context: Optional[Dict] = None,
+    ) -> Optional[str]:
+        """
+        Generate HA automation based on description.
+
+        Args:
+            description: What the automation should do
+            context: Optional context (entities, devices, etc.)
+
+        Returns:
+            Optional[str]: Generated YAML automation
+        """
+        messages = [
+            {
+                "role": "system",
+                "content": """You are an expert at creating Home Assistant automations.
+Generate complete, working YAML automations based on user descriptions.
+Include proper triggers, conditions, and actions.
+Use best practices and modern HA syntax.""",
+            },
+            {
+                "role": "user",
+                "content": f"Create a Home Assistant automation: {description}"
+                + (f"\n\nContext: {context}" if context else ""),
+            },
+        ]
+
+        response = await self.create_chat_completion(
+            messages=messages,
+            temperature=0.3,  # Lower for more deterministic output
+            max_tokens=1500,
+        )
+
+        if response:
+            return response.get("choices", [{}])[0].get("message", {}).get("content", "")
+        return None
+
+    async def analyze_configuration(
+        self,
+        config_content: str,
+        focus: Optional[str] = None,
+    ) -> Optional[str]:
+        """
+        Analyze HA configuration for issues.
+
+        Args:
+            config_content: Configuration YAML content
+            focus: Optional focus area (performance, security, etc.)
+
+        Returns:
+            Optional[str]: Analysis and recommendations
+        """
+        focus_text = f" Focus on: {focus}." if focus else ""
+
+        messages = [
+            {
+                "role": "system",
+                "content": """You are an expert Home Assistant configuration auditor.
+Analyze configurations for:
+- Syntax errors
+- Performance issues
+- Security vulnerabilities
+- Best practice violations
+- Optimization opportunities
+
+Provide specific, actionable recommendations.""",
+            },
+            {
+                "role": "user",
+                "content": f"Analyze this Home Assistant configuration:{focus_text}\n\n```yaml\n{config_content}\n```",
+            },
+        ]
+
+        response = await self.create_chat_completion(
+            messages=messages,
+            temperature=0.4,
+            max_tokens=2000,
+        )
+
+        if response:
+            return response.get("choices", [{}])[0].get("message", {}).get("content", "")
+        return None
+
+    async def troubleshoot_error(
+        self,
+        error_message: str,
+        context: Optional[Dict] = None,
+    ) -> Optional[str]:
+        """
+        Troubleshoot HA error message.
+
+        Args:
+            error_message: Error message to troubleshoot
+            context: Optional context (logs, config, etc.)
+
+        Returns:
+            Optional[str]: Troubleshooting advice
+        """
+        messages = [
+            {
+                "role": "system",
+                "content": """You are an expert Home Assistant troubleshooter.
+Analyze error messages and provide:
+- Root cause explanation
+- Step-by-step solution
+- Prevention tips
+
+Be specific and practical.""",
+            },
+            {
+                "role": "user",
+                "content": f"Help me troubleshoot this Home Assistant error:\n\n{error_message}"
+                + (f"\n\nAdditional context: {context}" if context else ""),
+            },
+        ]
+
+        response = await self.create_chat_completion(
+            messages=messages,
+            temperature=0.5,
+            max_tokens=1500,
+        )
+
+        if response:
+            return response.get("choices", [{}])[0].get("message", {}).get("content", "")
+        return None

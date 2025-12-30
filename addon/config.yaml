@@ -1,0 +1,40 @@
+# Home Assistant Add-on Configuration
+name: "HA Config Sync"
+version: "1.0.0"
+slug: ha_config_sync
+description: "Sincronizare automată configurații Home Assistant din GitHub"
+url: "https://github.com/cmdchar/ha-config-sync"
+arch:
+  - armhf
+  - armv7
+  - aarch64
+  - amd64
+  - i386
+init: false
+startup: services
+boot: auto
+map:
+  - config:rw
+ports:
+  8099/tcp: 8099
+ports_description:
+  8099/tcp: "Web UI pentru management"
+options:
+  github_repo: "cmdchar/ha-config"
+  github_token: ""
+  github_branch: "main"
+  server_id: ""
+  orchestrator_url: ""
+  auto_sync: true
+  sync_interval: 300
+  config_path: "/ha-config"
+schema:
+  github_repo: str
+  github_token: password
+  github_branch: str
+  server_id: str
+  orchestrator_url: str?
+  auto_sync: bool
+  sync_interval: int(60,3600)
+  config_path: str
+image: "ghcr.io/cmdchar/ha-config-sync-{arch}"

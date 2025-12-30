@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: ha-config-postgres
+    environment:
+      POSTGRES_DB: haconfig
+      POSTGRES_USER: haconfig
+      POSTGRES_PASSWORD: haconfig_secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ha-config-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U haconfig"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Orchestrator - Backend API
+  orchestrator:
+    build: ./orchestrator
+    container_name: ha-config-orchestrator
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./orchestrator:/app
+    environment:
+      - LOG_LEVEL=INFO
+      - DATABASE_URL=postgresql+asyncpg://haconfig:haconfig_secret@postgres:5432/haconfig
+      - SECRET_KEY=dev-secret-key-change-in-production-min-32-chars
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - SECRETS_MASTER_KEY=dev-master-key-change-in-production-must-be-32-bytes
+    restart: unless-stopped
+    networks:
+      - ha-config-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Dashboard - Frontend UI (Next.js + React)
+  dashboard:
+    build: ./dashboard-react
+    container_name: ha-config-dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8081/api/v1
+    restart: unless-stopped
+    networks:
+      - ha-config-network
+    depends_on:
+      - orchestrator
+
+networks:
+  ha-config-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

@@ -1,0 +1,300 @@
+#!/usr/bin/env python3
+"""
+HA Config Sync - Home Assistant Add-on
+Sincronizare automată configurații din GitHub
+"""
+
+import os
+import sys
+import json
+import time
+import logging
+import subprocess
+import schedule
+from pathlib import Path
+from flask import Flask, request, jsonify
+from threading import Thread
+import git
+import requests
+
+# Configurare logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Flask app pentru API
+app = Flask(__name__)
+
+class HAConfigSync:
+    def __init__(self):
+        self.config = self.load_config()
+        self.github_repo = self.config.get('github_repo')
+        self.github_token = self.config.get('github_token')
+        self.github_branch = self.config.get('github_branch', 'main')
+        self.server_id = self.config.get('server_id', 'unknown')
+        self.orchestrator_url = self.config.get('orchestrator_url')
+        self.auto_sync = self.config.get('auto_sync', True)
+        self.sync_interval = self.config.get('sync_interval', 300)
+        self.config_path = self.config.get('config_path', '/ha-config')
+        self.ha_config_dir = '/config'
+        self.repo = None
+
+    def load_config(self):
+        """Încarcă configurația add-on-ului"""
+        try:
+            with open('/data/options.json', 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            logger.warning("Options file not found, using environment variables")
+            return {
+                'github_repo': os.getenv('GITHUB_REPO', ''),
+                'github_token': os.getenv('GITHUB_TOKEN', ''),
+                'github_branch': os.getenv('GITHUB_BRANCH', 'main'),
+                'server_id': os.getenv('SERVER_ID', 'unknown'),
+                'orchestrator_url': os.getenv('ORCHESTRATOR_URL', ''),
+                'auto_sync': os.getenv('AUTO_SYNC', 'true').lower() == 'true',
+                'sync_interval': int(os.getenv('SYNC_INTERVAL', '300')),
+                'config_path': os.getenv('CONFIG_PATH', '/ha-config')
+            }
+
+    def get_repo_url(self):
+        """Construiește URL-ul repository-ului cu token"""
+        if self.github_token:
+            return f"https://{self.github_token}@github.com/{self.github_repo}.git"
+        return f"https://github.com/{self.github_repo}.git"
+
+    def clone_or_pull(self):
+        """Clone sau pull repository-ul GitHub"""
+        repo_path = Path(self.config_path)
+
+        try:
+            if repo_path.exists() and (repo_path / '.git').exists():
+                # Repository există, facem pull
+                logger.info(f"Pulling latest changes from {self.github_repo}")
+                self.repo = git.Repo(repo_path)
+                origin = self.repo.remotes.origin
+                origin.pull(self.github_branch)
+                logger.info("Pull successful")
+            else:
+                # Clone repository
+                logger.info(f"Cloning {self.github_repo} to {repo_path}")
+                repo_path.mkdir(parents=True, exist_ok=True)
+                self.repo = git.Repo.clone_from(
+                    self.get_repo_url(),
+                    repo_path,
+                    branch=self.github_branch
+                )
+                logger.info("Clone successful")
+
+            return True
+        except Exception as e:
+            logger.error(f"Git operation failed: {e}")
+            return False
+
+    def validate_config(self):
+        """Validează configurația Home Assistant"""
+        try:
+            logger.info("Validating Home Assistant configuration...")
+            result = subprocess.run(
+                ['ha', 'core', 'check'],
+                capture_output=True,
+                text=True
+            )
+
+            if result.returncode == 0:
+                logger.info("Configuration is valid")
+                return True
+            else:
+                logger.error(f"Configuration validation failed: {result.stderr}")
+                return False
+        except Exception as e:
+            logger.error(f"Validation error: {e}")
+            return False
+
+    def sync_to_ha_config(self):
+        """Sincronizează fișierele în directorul HA config"""
+        try:
+            src_dir = Path(self.config_path) / 'ha-config'
+            dst_dir = Path(self.ha_config_dir)
+
+            if not src_dir.exists():
+                logger.error(f"Source directory {src_dir} not found")
+                return False
+
+            logger.info(f"Syncing files from {src_dir} to {dst_dir}")
+
+            # Copiază fișierele (exclude .git și alte fișiere sensibile)
+            exclude_patterns = ['.git', '__pycache__', '*.pyc', 'secrets.yaml']
+
+            for item in src_dir.rglob('*'):
+                if item.is_file():
+                    # Verifică dacă fișierul trebuie exclus
+                    if any(pattern in str(item) for pattern in exclude_patterns):
+                        continue
+
+                    # Construiește calea destinație
+                    rel_path = item.relative_to(src_dir)
+                    dst_file = dst_dir / rel_path
+
+                    # Creează directorul dacă nu există
+                    dst_file.parent.mkdir(parents=True, exist_ok=True)
+
+                    # Copiază fișierul
+                    import shutil
+                    shutil.copy2(item, dst_file)
+                    logger.debug(f"Copied {item} -> {dst_file}")
+
+            logger.info("File sync completed")
+            return True
+        except Exception as e:
+            logger.error(f"Sync error: {e}")
+            return False
+
+    def restart_homeassistant(self):
+        """Restart Home Assistant"""
+        try:
+            logger.info("Restarting Home Assistant...")
+            subprocess.run(['ha', 'core', 'restart'], check=True)
+            logger.info("Restart command sent")
+            return True
+        except Exception as e:
+            logger.error(f"Restart failed: {e}")
+            return False
+
+    def notify_orchestrator(self, event, data=None):
+        """Notifică orchestratorul despre evenimente"""
+        if not self.orchestrator_url:
+            return
+
+        try:
+            payload = {
+                'server_id': self.server_id,
+                'event': event,
+                'timestamp': time.time(),
+                'data': data or {}
+            }
+
+            response = requests.post(
+                f"{self.orchestrator_url}/api/events",
+                json=payload,
+                timeout=10
+            )
+
+            if response.status_code == 200:
+                logger.debug(f"Notified orchestrator: {event}")
+            else:
+                logger.warning(f"Orchestrator notification failed: {response.status_code}")
+        except Exception as e:
+            logger.error(f"Failed to notify orchestrator: {e}")
+
+    def do_sync(self):
+        """Execută sincronizarea completă"""
+        logger.info("=== Starting sync process ===")
+        self.notify_orchestrator('sync_started')
+
+        # Step 1: Pull din GitHub
+        if not self.clone_or_pull():
+            self.notify_orchestrator('sync_failed', {'step': 'git_pull'})
+            return False
+
+        # Step 2: Sincronizează fișierele
+        if not self.sync_to_ha_config():
+            self.notify_orchestrator('sync_failed', {'step': 'file_sync'})
+            return False
+
+        # Step 3: Validează configurația
+        if not self.validate_config():
+            self.notify_orchestrator('sync_failed', {'step': 'validation'})
+            logger.error("Sync aborted due to invalid configuration")
+            return False
+
+        # Step 4: Restart Home Assistant
+        if not self.restart_homeassistant():
+            self.notify_orchestrator('sync_failed', {'step': 'restart'})
+            return False
+
+        logger.info("=== Sync completed successfully ===")
+        self.notify_orchestrator('sync_completed')
+        return True
+
+    def start_scheduler(self):
+        """Pornește scheduler-ul pentru sync automat"""
+        if not self.auto_sync:
+            logger.info("Auto-sync is disabled")
+            return
+
+        logger.info(f"Scheduling auto-sync every {self.sync_interval} seconds")
+        schedule.every(self.sync_interval).seconds.do(self.do_sync)
+
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
+
+# Instanță globală
+syncer = HAConfigSync()
+
+# API Routes
+@app.route('/api/status', methods=['GET'])
+def get_status():
+    """Returnează status-ul curent"""
+    return jsonify({
+        'server_id': syncer.server_id,
+        'github_repo': syncer.github_repo,
+        'github_branch': syncer.github_branch,
+        'auto_sync': syncer.auto_sync,
+        'sync_interval': syncer.sync_interval,
+        'last_sync': 'N/A'  # TODO: track last sync time
+    })
+
+@app.route('/api/sync', methods=['POST'])
+def trigger_sync():
+    """Trigger manual sync"""
+    logger.info("Manual sync triggered via API")
+    success = syncer.do_sync()
+    return jsonify({
+        'success': success,
+        'message': 'Sync completed' if success else 'Sync failed'
+    })
+
+@app.route('/api/webhook', methods=['POST'])
+def github_webhook():
+    """Primește webhook de la GitHub"""
+    logger.info("GitHub webhook received")
+    payload = request.json
+
+    # Verifică dacă e push pe branch-ul nostru
+    if payload.get('ref') == f"refs/heads/{syncer.github_branch}":
+        logger.info("Push detected on tracked branch, triggering sync")
+        Thread(target=syncer.do_sync).start()
+        return jsonify({'status': 'sync_started'})
+
+    return jsonify({'status': 'ignored'})
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({'status': 'healthy'})
+
+def main():
+    """Main entry point"""
+    logger.info("=== HA Config Sync Starting ===")
+    logger.info(f"Server ID: {syncer.server_id}")
+    logger.info(f"GitHub Repo: {syncer.github_repo}")
+    logger.info(f"Auto-sync: {syncer.auto_sync}")
+
+    # Sync inițial
+    logger.info("Performing initial sync...")
+    syncer.do_sync()
+
+    # Pornește scheduler în thread separat
+    if syncer.auto_sync:
+        Thread(target=syncer.start_scheduler, daemon=True).start()
+
+    # Pornește API server
+    logger.info("Starting API server on port 8099")
+    app.run(host='0.0.0.0', port=8099)
+
+if __name__ == '__main__':
+    main()
