@@ -60,7 +60,7 @@ export default function TerminalPage() {
             </SelectTrigger>
             <SelectContent>
               {servers?.map((server) => (
-                <SelectItem key={server.id} value={server.id}>
+                <SelectItem key={server.id} value={String(server.id)}>
                   {server.name} ({server.host})
                 </SelectItem>
               ))}

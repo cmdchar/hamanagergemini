@@ -197,8 +197,13 @@ export default function ServersPage() {
                             title="Open Node-RED"
                             onClick={() => window.open(`http://${server.host}:1880`, '_blank')}
                           >
-                            <ExternalLink className="h-4 w-4" />
+                             <ExternalLink className="h-4 w-4" />
                           </Button>
+                          <Link href={`/servers/${server.id}/config`}>
+                            <Button variant="outline" size="sm" title="Manage Config">
+                              <FileText className="h-4 w-4" />
+                            </Button>
+                          </Link>
                           <Button
                             variant="outline"
                             size="sm"

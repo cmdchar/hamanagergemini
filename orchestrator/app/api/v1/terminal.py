@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 @router.websocket("/terminal/{server_id}")
 async def websocket_endpoint(
     websocket: WebSocket,
-    server_id: str,
+    server_id: int,
     db: AsyncSession = Depends(get_db),
 ):
     # Verify user token (simplified for this context)
@@ -47,21 +47,21 @@ async def websocket_endpoint(
         # Prepare connection parameters
         # We try to use the SSH key path if available, otherwise password
         connect_kwargs = {
-            "host": server.host,
-            "port": server.port,
-            "username": server.username,
+            "host": server.ssh_host or server.host,
+            "port": server.ssh_port or 22,
+            "username": server.ssh_user,
             "known_hosts": None  # Skip host key verification for convenience
         }
 
         if server.ssh_key_path:
             connect_kwargs["client_keys"] = [server.ssh_key_path]
-        elif server.password:
-            connect_kwargs["password"] = server.password
+        elif server.ssh_password:
+            connect_kwargs["password"] = server.ssh_password
         else:
              # Try default keys if nothing specified, or fail
              pass
 
-        await websocket.send_text(f"\r\nConnecting to {server.username}@{server.host}...\r\n")
+        await websocket.send_text(f"\r\nConnecting to {connect_kwargs['username']}@{connect_kwargs['host']}...\r\n")
 
         try:
             async with asyncssh.connect(**connect_kwargs) as conn:

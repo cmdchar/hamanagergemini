@@ -33,7 +33,7 @@ services:
       - LOG_LEVEL=INFO
       - DATABASE_URL=postgresql+asyncpg://haconfig:haconfig_secret@postgres:5432/haconfig
       - SECRET_KEY=dev-secret-key-change-in-production-min-32-chars
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - SECRETS_MASTER_KEY=dev-master-key-change-in-production-must-be-32-bytes
     restart: unless-stopped
     networks:

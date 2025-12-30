@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import ai, auth, backup, deployments, esphome, fpp, security, servers, tailscale, wled, wled_schedules, dashboard, terminal
+from app.api.v1 import ai, auth, backup, deployments, esphome, fpp, security, servers, tailscale, wled, wled_schedules, dashboard, terminal, ha_config
 
 api_router = APIRouter()
 
@@ -20,3 +20,4 @@ api_router.include_router(backup.router)
 api_router.include_router(ai.router)
 api_router.include_router(security.router)
 api_router.include_router(terminal.router)
+api_router.include_router(ha_config.router)

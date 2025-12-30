@@ -61,6 +61,7 @@ async def init_db() -> None:
         server,
         snapshot,
         user,
+        ha_config,
     )
 
     async with engine.begin() as conn:
