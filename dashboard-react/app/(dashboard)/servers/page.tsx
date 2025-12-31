@@ -25,7 +25,8 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Plus, Trash2, AlertCircle, CheckCircle, Loader2, TestTube, ExternalLink } from "lucide-react"
+import { Plus, Trash2, AlertCircle, CheckCircle, Loader2, TestTube, ExternalLink, FileText } from "lucide-react"
+import Link from "next/link"
 import { toast } from "sonner"
 import { ServerForm } from "@/components/forms/server-form"
 

@@ -4,7 +4,7 @@ from sqlalchemy import select, delete
 from app.db.session import get_db
 from app.models.server import Server
 from app.models.ha_config import HaConfig
-from app.schemas.ha_config import HaConfigResponse
+from app.schemas.ha_config import HaConfigResponse, HaConfigUpdate
 from typing import List
 import asyncssh
 import logging

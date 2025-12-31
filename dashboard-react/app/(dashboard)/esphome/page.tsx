@@ -45,7 +45,7 @@ export default function ESPHomePage() {
 
   const discoverMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiClient.post("/esphome/discover")
+      const response = await apiClient.post("/esphome/discover", { timeout: 10 })
       return response.data
     },
     onSuccess: () => {

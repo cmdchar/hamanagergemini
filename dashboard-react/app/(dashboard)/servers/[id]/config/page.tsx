@@ -6,7 +6,8 @@ import { apiClient } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { RefreshCw, FileText, ArrowLeft } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { RefreshCw, FileText, ArrowLeft, Save } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import { useParams } from "next/navigation"
@@ -22,6 +23,7 @@ export default function ServerConfigPage() {
   const params = useParams()
   const serverId = params.id as string
   const [selectedConfig, setSelectedConfig] = useState<HaConfig | null>(null)
+  const [editedContent, setEditedContent] = useState<string>("")
   const queryClient = useQueryClient()
 
   const { data: configs, isLoading } = useQuery<HaConfig[]>({
@@ -45,6 +47,36 @@ export default function ServerConfigPage() {
       toast.error("Failed to sync configurations")
     },
   })
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedConfig) return
+      const response = await apiClient.put(`/servers/${serverId}/configs/${selectedConfig.id}`, {
+        content: editedContent
+      })
+      return response.data
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["server-configs", serverId] })
+      // Update local state to reflect saved content
+      if (selectedConfig) {
+        setSelectedConfig({
+          ...selectedConfig,
+          content: editedContent
+        })
+      }
+      toast.success("Configuration saved successfully")
+    },
+    onError: (error: any) => {
+      console.error("Save error:", error)
+      toast.error(`Failed to save configuration: ${error.response?.data?.detail || error.message}`)
+    },
+  })
+
+  const handleSelectConfig = (config: HaConfig) => {
+    setSelectedConfig(config)
+    setEditedContent(config.content)
+  }
 
   return (
     <div className="space-y-6 h-[calc(100vh-100px)] flex flex-col">
@@ -84,7 +116,7 @@ export default function ServerConfigPage() {
                       key={config.id}
                       variant={selectedConfig?.id === config.id ? "secondary" : "ghost"}
                       className="w-full justify-start font-mono text-sm truncate"
-                      onClick={() => setSelectedConfig(config)}
+                      onClick={() => handleSelectConfig(config)}
                       title={config.path}
                     >
                       <FileText className="mr-2 h-4 w-4 shrink-0" />
@@ -102,17 +134,30 @@ export default function ServerConfigPage() {
             <CardTitle className="text-lg font-mono">
               {selectedConfig ? selectedConfig.path : "Select a file"}
             </CardTitle>
+            {selectedConfig && (
+              <Button 
+                onClick={() => saveMutation.mutate()}
+                disabled={saveMutation.isPending || editedContent === selectedConfig.content}
+                size="sm"
+              >
+                <Save className="mr-2 h-4 w-4" />
+                {saveMutation.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="flex-1 overflow-hidden min-h-0 p-0">
              {selectedConfig ? (
-               <div className="h-full w-full overflow-auto bg-muted/50 p-4">
-                 <pre className="text-sm font-mono whitespace-pre-wrap break-words">
-                   {selectedConfig.content}
-                 </pre>
+               <div className="h-full w-full p-0">
+                 <Textarea
+                   value={editedContent}
+                   onChange={(e) => setEditedContent(e.target.value)}
+                   className="h-full w-full resize-none font-mono text-sm border-0 focus-visible:ring-0 rounded-none p-4"
+                   spellCheck={false}
+                 />
                </div>
              ) : (
                <div className="flex h-full items-center justify-center text-muted-foreground">
-                 Select a file to view its content
+                 Select a file to view and edit its content
                </div>
              )}
           </CardContent>
