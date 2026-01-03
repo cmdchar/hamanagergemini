@@ -32,6 +32,8 @@ class AIConversationUpdate(BaseModel):
 
     title: Optional[str] = Field(None, min_length=1, max_length=255)
     is_active: Optional[bool] = None
+    is_pinned: Optional[bool] = None
+    is_archived: Optional[bool] = None
     summary: Optional[str] = None
     meta_data: Optional[Dict] = Field(None, serialization_alias="metadata")
 
@@ -43,6 +45,8 @@ class AIConversationResponse(AIConversationBase):
     user_id: int
     summary: Optional[str] = None
     is_active: bool
+    is_pinned: bool
+    is_archived: bool
     last_message_at: Optional[datetime] = None
     message_count: int
     meta_data: Optional[Dict] = Field(None, serialization_alias="metadata")

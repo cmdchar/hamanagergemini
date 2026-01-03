@@ -27,13 +27,15 @@ HA Config Manager is a powerful, enterprise-grade platform for managing Home Ass
 
 ### 🎯 What's New (Latest Update)
 
+- **AI File Modification System**: Complete workflow for AI-proposed changes with review, diff viewer, and push controls
+- **Diff Viewer UI**: Side-by-side and unified diff views with syntax highlighting for AI modifications
+- **Conversation History**: View and resume all past AI conversations with full message history
+- **Auto-Sync on Server Add**: Automatically sync all configuration files recursively when adding a new server
 - **React 19.2 Frontend**: Complete migration from Vue 3 to modern React with Next.js 16
 - **GitHub Integration**: Push AI-generated changes to repositories with PR management
-- **AI File Modifications**: Track all AI-generated code changes with diffs and history
-- **Enhanced AI Assistant**: Persistent context awareness with conversation history
+- **Enhanced AI Assistant**: Persistent context awareness with live server file access
 - **Deployment History**: Complete audit trail of all deployments and changes
 - **WebSocket Terminal**: Real-time command execution and log streaming
-- **Improved Home Assistant Config Management**: Advanced configuration sync and validation
 
 ### Why HA Config Manager?
 
@@ -66,11 +68,19 @@ HA Config Manager is a powerful, enterprise-grade platform for managing Home Ass
 
 ### 🤖 AI & Automation
 - **AI Assistant**: Chat interface powered by Deepseek AI with persistent context
+- **Conversation Management**: View, resume, and manage all past AI conversations
+- **File Modification Workflow**: Complete system for AI-proposed changes
+  - AI proposes changes in standardized format
+  - User reviews changes in diff viewer (unified/split view)
+  - Approve/Reject workflow with comments
+  - Push to Server and/or GitHub with tracking
+- **Diff Viewer**: Side-by-side and unified views with syntax highlighting
+- **Live Server Access**: AI sees actual files on server via SSH in real-time
+- **Auto-sync**: Recursive file sync when adding servers
 - **Action Execution**: AI can create servers, deploy HA, modify configs
 - **Context Awareness**: Understands current deployment context and file modifications
 - **Rollback Support**: Automatic rollback for failed operations
-- **File Modification Tracking**: Track AI-generated code changes with diffs
-- **AI Context Management**: Maintain conversation history with system context
+- **Modification History**: Complete audit trail of all AI changes with version tracking
 
 ### 💾 Backup & Restore
 - **Scheduled Backups**: Cron-based automation with retention policies
@@ -319,15 +329,33 @@ POST /api/v1/backup/schedules
 ### Using AI Assistant
 
 1. Navigate to **AI Assistant** page
-2. Start a conversation
-3. Ask questions or request actions:
+2. **Start or Resume Conversation**
+   - Click **"New Conversation"** button to start fresh
+   - Or select from **past conversations** in the sidebar
+   - All message history is preserved and searchable
+3. **Ask questions or request actions:**
    - "Create a new server at 192.168.1.100"
    - "Deploy Home Assistant 2024.1 on server-1"
    - "Show me all offline ESPHome devices"
-   - "Generate a Node-RED flow for sensor monitoring"
-   - "Create a backup schedule for all servers"
-4. Review suggested actions and code changes
-5. Confirm to execute
+   - "Modify my configuration.yaml to add MQTT integration"
+   - "Update automations.yaml with a motion sensor trigger"
+4. **Review AI-Proposed Changes**
+   - AI detects when it wants to modify files
+   - Toast notification appears: "AI created 1 file modification. Review in AI Modifications."
+   - Click **"Review"** to see the changes
+5. **Review in Diff Viewer**
+   - Navigate to **AI Modifications** page
+   - See all pending, approved, and rejected changes
+   - Click on modification to view **BEFORE/AFTER diff**
+   - Toggle between **Unified** and **Split** view
+   - Read AI's explanation of changes
+6. **Approve/Reject**
+   - Add optional review comment
+   - Click **"Approve"** or **"Reject"**
+7. **Push Changes** (if approved)
+   - Choose **Push to Server** and/or **Push to GitHub**
+   - Add commit message for GitHub
+   - Track push status and commit SHA
 
 #### AI File Modifications Tracking
 

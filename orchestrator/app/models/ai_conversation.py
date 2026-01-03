@@ -30,6 +30,8 @@ class AIConversation(Base, TableNameMixin, TimestampMixin):
 
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
     last_message_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     message_count: Mapped[int] = mapped_column(Integer, default=0)
 

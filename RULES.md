@@ -34,6 +34,7 @@ Acest document definește standardele de lucru pentru proiectul HA Config Manage
 
 2. **Frontend (Dashboard):**
    - [ ] Verificat endpoint-ul API folosit (prefix corect: `/servers/`, `/ha-config/`, `/ai/`)
+   - [ ] Verificat parametrii query string (ex: `active_only`, `limit`, `skip`)
    - [ ] Type interfaces create/actualizate pentru response-uri
    - [ ] Query keys unice și consistente în React Query
    - [ ] Invalidate queries după mutații relevante
@@ -41,6 +42,8 @@ Acest document definește standardele de lucru pentru proiectul HA Config Manage
    - [ ] Loading states adăugate
    - [ ] UI components necesare importate
    - [ ] Test în browser (verificat Network tab, Console pentru erori)
+   - [ ] **VERIFICARE UI VIZUALĂ**: Deschide pagina în browser și verifică că datele apar corect
+   - [ ] **CONSOLE LOGS**: Adaugă console.log temporar pentru debugging (elimină înainte de commit)
 
 3. **Integrări între Module:**
    - [ ] Dacă modifici un schema, verifică TOATE endpoint-urile care îl folosesc
@@ -169,6 +172,18 @@ const { data } = useQuery({
 queryClient.invalidateQueries({ queryKey: ["ai-messages", conversationId] })
 ```
 
+**Eroare 7: Query Parameters Lipsă**
+```typescript
+// GREȘIT - backend filtrează cu active_only=true dar frontend nu specifică
+const response = await apiClient.get("/ai/conversations")
+// Rezultat: returnează doar conversații active, nu toate
+
+// CORECT - specifică parametrii explicit
+const response = await apiClient.get("/ai/conversations", {
+  params: { active_only: false }
+})
+```
+
 ### 4.5. Reguli Suplimentare pentru Debugging
 
 **Verificare Logs Înainte de Commit:**
@@ -204,3 +219,57 @@ docker logs ha-config-dashboard 2>&1 | tail -5
 ## 5. Securitate
 - **Chei și Secrete:** Nu comite niciodată chei reale în cod. Folosește variabile de mediu (`.env` sau `docker-compose.yml`).
 - **Criptare:** Orice dată sensibilă (parole, token-uri) stocată în DB trebuie să fie criptată folosind `ENCRYPTION_KEY`.
+
+## 6. Integrare AI Assistant
+**OBLIGATORIU:** După orice modificare funcțională la platformă (nou endpoint, nouă funcționalitate, nou model de date):
+
+1. **Actualizare Cunoștințe AI:**
+   - Asigură-te că AI-ul are acces la funcționalitatea nouă prin endpoint-uri API
+   - Verifică că AI poate citi, modifica sau folosi noua funcționalitate dacă este relevant
+   - AI-ul trebuie să fie o enciclopedie completă a platformei - dacă există o funcționalitate, AI trebuie să știe despre ea
+
+2. **Exemple de integrări necesare:**
+   - Dacă adaugi un nou tip de entitate (ex: conversations, file modifications) → AI trebuie să poată lista, crea, modifica, șterge
+   - Dacă adaugi un nou endpoint (ex: `/servers/{id}/logs`) → AI trebuie să știe să îl folosească pentru debugging
+   - Dacă adaugi o nouă configurație (ex: WLED, FPP) → AI trebuie să poată ghida utilizatorul în configurarea acesteia
+
+3. **Test AI Awareness:**
+   - După implementare, testează prin AI Assistant dacă poate răspunde la întrebări despre noua funcționalitate
+   - Exemplu: Dacă ai adăugat "pin conversation", întreabă AI-ul "Can I pin important conversations?" și verifică răspunsul
+
+4. **Context Service:**
+   - Dacă funcționalitatea nouă afectează contextul utilizatorului (ex: noi entități de monitorizat), actualizează `AIContextService`
+   - Asigură-te că noile date apar în context când AI conversează cu utilizatorul
+
+## 7. Documentație Funcționalități
+**OBLIGATORIU:** Fiecare funcționalitate nouă trebuie documentată pentru utilizatori:
+
+1. **UI Tooltips și Help Text:**
+   - Butoane și acțiuni complexe trebuie să aibă tooltips explicative
+   - Formulare trebuie să aibă placeholder text și descrieri clare
+   - Mesaje de eroare trebuie să fie descriptive și să ghideze utilizatorul spre rezolvare
+
+2. **In-App Documentation:**
+   - Pentru funcționalități majore, adaugă secțiuni de "Help" sau "?" în UI
+   - Exemplu: Un popover lângă "AI Modifications" care explică ce sunt și cum se folosesc
+
+3. **README.md Updates:**
+   - Actualizează README.md cu noile funcționalități adăugate
+   - Include capturi de ecran sau GIF-uri unde este relevant
+   - Documentează endpoint-urile API noi în secțiunea API
+
+4. **Toast Messages:**
+   - Folosește toast.success cu mesaje clare despre ce s-a întâmplat
+   - Exemplu: "Conversation pinned successfully" nu doar "Success"
+   - Pentru acțiuni cu consecințe, adaugă acțiuni în toast (ex: "Undo", "Review")
+
+5. **Comentarii în Cod:**
+   - Funcții complexe trebuie să aibă docstrings explicative
+   - Logica business complicată trebuie comentată inline
+   - Nu documenta cod evident (ex: "increment counter" pentru `count++`)
+
+6. **Onboarding:**
+   - Pentru utilizatori noi, consideră adăugarea de exemple sau "starter templates"
+   - Empty states trebuie să ghideze utilizatorul ce să facă ("Click + to create first conversation")
+
+**Principiu:** Un utilizator trebuie să poată folosi orice funcționalitate fără să consulte documentație externă sau cod sursă.

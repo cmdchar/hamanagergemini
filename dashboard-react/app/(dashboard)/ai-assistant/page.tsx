@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { Loader2, Send, Bot, User, Server, Rocket, Database, RefreshCw, Sparkles, MessageSquare, Plus } from "lucide-react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Loader2, Send, Bot, User, Server, Rocket, Database, RefreshCw, Sparkles, MessageSquare, Plus, Pin, Archive, Trash2, MoreVertical } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
@@ -36,6 +37,8 @@ interface Conversation {
   last_message_at: string | null
   message_count: number
   is_active: boolean
+  is_pinned: boolean
+  is_archived: boolean
 }
 
 interface AIMessageResponse {
@@ -65,8 +68,21 @@ export default function AIAssistantPage() {
   const { data: conversations, isLoading: conversationsLoading } = useQuery<Conversation[]>({
     queryKey: ["ai-conversations"],
     queryFn: async () => {
-      const response = await apiClient.get("/ai/conversations")
-      return response.data
+      const response = await apiClient.get("/ai/conversations", {
+        params: { active_only: false }
+      })
+      console.log("Conversations loaded:", response.data)
+      // Sort: pinned first, then by last_message_at or created_at (newest first)
+      return response.data.sort((a: Conversation, b: Conversation) => {
+        // Pinned conversations always come first
+        if (a.is_pinned && !b.is_pinned) return -1
+        if (!a.is_pinned && b.is_pinned) return 1
+
+        // For conversations with same pin status, sort by date
+        const dateA = new Date(a.last_message_at || a.created_at)
+        const dateB = new Date(b.last_message_at || b.created_at)
+        return dateB.getTime() - dateA.getTime()
+      })
     },
   })
 
@@ -113,14 +129,88 @@ export default function AIAssistantPage() {
     },
   })
 
-  // Auto-select first conversation or create new one on mount
+  // Pin/unpin conversation
+  const togglePinMutation = useMutation({
+    mutationFn: async ({ id, isPinned }: { id: number; isPinned: boolean }) => {
+      const response = await apiClient.patch(`/ai/conversations/${id}`, {
+        is_pinned: !isPinned,
+      })
+      return response.data
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["ai-conversations"] })
+      toast.success(data.is_pinned ? "Conversation pinned" : "Conversation unpinned")
+    },
+    onError: () => {
+      toast.error("Failed to update conversation")
+    },
+  })
+
+  // Archive/unarchive conversation
+  const toggleArchiveMutation = useMutation({
+    mutationFn: async ({ id, isArchived }: { id: number; isArchived: boolean }) => {
+      const response = await apiClient.patch(`/ai/conversations/${id}`, {
+        is_archived: !isArchived,
+      })
+      return response.data
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["ai-conversations"] })
+      toast.success(data.is_archived ? "Conversation archived" : "Conversation unarchived")
+      // If archiving current conversation, clear selection
+      if (data.is_archived && conversationId === data.id) {
+        setConversationId(null)
+        setMessages([])
+      }
+    },
+    onError: () => {
+      toast.error("Failed to update conversation")
+    },
+  })
+
+  // Delete conversation
+  const deleteConversationMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiClient.delete(`/ai/conversations/${id}`)
+    },
+    onSuccess: (_, deletedId) => {
+      queryClient.invalidateQueries({ queryKey: ["ai-conversations"] })
+      toast.success("Conversation deleted")
+      // If deleting current conversation, clear selection
+      if (conversationId === deletedId) {
+        setConversationId(null)
+        setMessages([])
+      }
+    },
+    onError: () => {
+      toast.error("Failed to delete conversation")
+    },
+  })
+
+  // Auto-select first conversation on mount (but don't auto-create)
   useEffect(() => {
     if (conversations && conversations.length > 0 && !conversationId) {
-      setConversationId(conversations[0].id)
-    } else if (conversations && conversations.length === 0 && !conversationId) {
-      createConversationMutation.mutate()
+      // Load last used conversation from localStorage or use first one
+      const savedConversationId = localStorage.getItem('lastConversationId')
+      const lastId = savedConversationId ? parseInt(savedConversationId) : null
+
+      // Check if saved conversation exists in the list
+      const exists = lastId && conversations.some(c => c.id === lastId)
+
+      if (exists) {
+        setConversationId(lastId)
+      } else {
+        setConversationId(conversations[0].id)
+      }
     }
-  }, [conversations, conversationId])
+  }, [conversations])
+
+  // Save conversation ID to localStorage when it changes
+  useEffect(() => {
+    if (conversationId) {
+      localStorage.setItem('lastConversationId', conversationId.toString())
+    }
+  }, [conversationId])
 
   // Get user context
   const { data: userContext, refetch: refetchContext } = useQuery<UserContext>({
@@ -197,7 +287,7 @@ export default function AIAssistantPage() {
     if (!input.trim()) return
 
     if (!conversationId) {
-      toast.error("AI chat is still initializing, please wait...")
+      toast.error("Please create a conversation first by clicking the + button")
       return
     }
 
@@ -236,39 +326,94 @@ export default function AIAssistantPage() {
               <div className="flex items-center justify-center p-8">
                 <Loader2 className="h-6 w-6 animate-spin" />
               </div>
-            ) : conversations && conversations.length > 0 ? (
+            ) : !conversations ? (
+              <div className="p-8 text-center text-muted-foreground">
+                <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p className="text-sm font-medium">Loading conversations...</p>
+              </div>
+            ) : conversations.length > 0 ? (
               <div className="space-y-1 p-2">
                 {conversations.map((conv) => (
-                  <button
+                  <div
                     key={conv.id}
                     onClick={() => setConversationId(conv.id)}
                     className={cn(
-                      "w-full text-left px-3 py-2 rounded-lg transition-colors",
+                      "w-full text-left px-3 py-2 rounded-lg transition-colors group relative cursor-pointer",
                       "hover:bg-accent",
-                      conversationId === conv.id && "bg-accent"
+                      conversationId === conv.id && "bg-accent border-2 border-primary"
                     )}
                   >
                     <div className="flex items-start gap-2">
-                      <MessageSquare className="h-4 w-4 mt-1 flex-shrink-0" />
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {conv.is_pinned && <Pin className="h-3 w-3 text-primary fill-primary" />}
+                        <MessageSquare className="h-4 w-4 mt-1" />
+                      </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate">{conv.title}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <Badge variant="outline" className="text-xs">
-                            {conv.message_count} messages
+                            {conv.message_count} msg
                           </Badge>
                           <span className="text-xs text-muted-foreground">
-                            {new Date(conv.created_at).toLocaleDateString()}
+                            {conv.last_message_at
+                              ? new Date(conv.last_message_at).toLocaleDateString()
+                              : new Date(conv.created_at).toLocaleDateString()}
                           </span>
                         </div>
                       </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              togglePinMutation.mutate({ id: conv.id, isPinned: conv.is_pinned })
+                            }}
+                          >
+                            <Pin className="h-4 w-4 mr-2" />
+                            {conv.is_pinned ? "Unpin" : "Pin"}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleArchiveMutation.mutate({ id: conv.id, isArchived: conv.is_archived })
+                            }}
+                          >
+                            <Archive className="h-4 w-4 mr-2" />
+                            {conv.is_archived ? "Unarchive" : "Archive"}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (confirm("Are you sure you want to delete this conversation?")) {
+                                deleteConversationMutation.mutate(conv.id)
+                              }
+                            }}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             ) : (
               <div className="p-8 text-center text-muted-foreground">
                 <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No conversations yet</p>
+                <p className="text-sm font-medium">No conversations yet</p>
+                <p className="text-xs mt-1">Click the + button to start</p>
               </div>
             )}
           </ScrollArea>

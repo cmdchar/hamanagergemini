@@ -36,7 +36,12 @@
       "Bash(taskkill:*)",
       "Bash(start https://github.com/new)",
       "Bash(grep:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(git add:*)",
+      "Bash(del NUL)",
+      "Bash(git fetch:*)",
+      "Bash(timeout 30 docker logs:*)",
+      "Bash(git rm:*)"
     ]
   }
 }

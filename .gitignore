@@ -94,3 +94,7 @@ temp/
 
 # CI/CD
 .github/secrets/
+
+# Old builds and archives
+vechi/
+test_features.py

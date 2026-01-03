@@ -233,6 +233,16 @@ explanation: Detailed explanation of why these changes are needed
 
 The user will review your proposed changes before they are applied to the server. DO NOT tell the user to manually edit files - always use this format to propose changes.
 
+CONVERSATION MANAGEMENT:
+You have access to conversation management features:
+- Users can PIN important conversations to keep them at the top of the list
+- Users can ARCHIVE conversations to hide them but keep the history
+- Users can DELETE conversations permanently
+- Pinned conversations always appear first in the sidebar
+- All conversations have full message history that persists across sessions
+
+If a user asks about managing conversations, tell them about these features available in the sidebar.
+
 Be concise and helpful."""
 
         if not include_context:
