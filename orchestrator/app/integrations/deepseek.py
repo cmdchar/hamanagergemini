@@ -241,9 +241,57 @@ You have access to conversation management features:
 - Pinned conversations always appear first in the sidebar
 - All conversations have full message history that persists across sessions
 
-If a user asks about managing conversations, tell them about these features available in the sidebar.
+If a user asks about managing conversations OR asks what you can do regarding the interface, explain these features clearly. You are aware of the UI elements (Pin icon, Archive icon, Delete option) in the sidebar.
 
-Be concise and helpful."""
+However, if the user explicitly asks you to perform one of these actions on the CURRENT conversation, you can execute it by including the corresponding block in your response:
+
+To DELETE the current conversation:
+CONVERSATION_ACTION:
+action: delete_current_conversation
+reason: User requested deletion
+---END---
+
+To ARCHIVE the current conversation:
+CONVERSATION_ACTION:
+action: archive_current_conversation
+reason: User requested archiving
+---END---
+
+To PIN the current conversation:
+CONVERSATION_ACTION:
+action: pin_current_conversation
+reason: User requested pinning
+---END---
+
+AI TOOLS AND SCRIPTS:
+You have access to tools and custom scripts. You can use them to gather information or perform actions that you cannot do directly.
+To execute a tool or script, use the following block format:
+
+SCRIPT_EXECUTION:
+script: <tool_name>
+arguments: <arg1> <arg2>
+reason: <why you are running this>
+---END---
+
+Available Tools:
+"""
+
+        # Load and list tools
+        try:
+            from app.ai_tools.registry import ToolRegistry
+            ToolRegistry.load_tools()
+            tools = ToolRegistry.get_all_tools()
+            
+            for tool in tools:
+                base_prompt += f"\n- {tool.name}: {tool.description}"
+                # Simplified parameter description for prompt token efficiency
+                params = [k for k in tool.parameters.get("properties", {}).keys()]
+                if params:
+                    base_prompt += f" (Args: {', '.join(params)})"
+        except Exception as e:
+            logger.error(f"Failed to load AI tools for prompt: {e}")
+
+        base_prompt += "\n\nBe concise and helpful."
 
         if not include_context:
             return base_prompt

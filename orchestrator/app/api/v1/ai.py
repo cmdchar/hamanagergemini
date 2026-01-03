@@ -311,6 +311,69 @@ def parse_file_modifications(ai_response: str) -> List[Dict]:
     return modifications
 
 
+def parse_conversation_actions(ai_response: str) -> List[Dict]:
+    """
+    Parse AI response for conversation actions.
+
+    Format expected:
+    CONVERSATION_ACTION:
+    action: delete_current_conversation
+    reason: User requested deletion
+    ---END---
+    """
+    actions = []
+
+    # Find all CONVERSATION_ACTION blocks
+    pattern = r'CONVERSATION_ACTION:\s*\naction:\s*(.+?)\s*\nreason:\s*(.+?)\s*\n---END---'
+
+    matches = re.finditer(pattern, ai_response, re.DOTALL | re.MULTILINE)
+
+    for match in matches:
+        action = match.group(1).strip()
+        reason = match.group(2).strip()
+
+        actions.append({
+            'action': action,
+            'reason': reason,
+        })
+
+    return actions
+
+
+def parse_script_executions(ai_response: str) -> List[Dict]:
+    """
+    Parse AI response for script executions.
+    Format:
+    SCRIPT_EXECUTION:
+    script: <tool_name>
+    arguments: <arg1> <arg2>
+    reason: <reason>
+    ---END---
+    """
+    executions = []
+    pattern = r'SCRIPT_EXECUTION:\s*\nscript:\s*(.+?)\s*\narguments:\s*(.*?)\s*\nreason:\s*(.+?)\s*\n---END---'
+    matches = re.finditer(pattern, ai_response, re.DOTALL | re.MULTILINE)
+
+    import shlex
+
+    for match in matches:
+        script = match.group(1).strip()
+        args_str = match.group(2).strip()
+        reason = match.group(3).strip()
+        
+        try:
+            args = shlex.split(args_str)
+        except:
+            args = args_str.split()
+
+        executions.append({
+            'script': script,
+            'arguments': args,
+            'reason': reason
+        })
+    return executions
+
+
 # Chat endpoint
 @router.post("/conversations/{conversation_id}/chat", response_model=AIChatResponse)
 async def chat(
@@ -351,11 +414,103 @@ async def chat(
                 detail="Failed to get AI response",
             )
 
+        executed_actions = []
+
+        # Parse AI response for conversation actions
+        conversation_actions = parse_conversation_actions(message.content)
+        for action in conversation_actions:
+            if action['action'] == 'delete_current_conversation':
+                # Soft delete conversation
+                conversation.is_active = False
+                await db.commit()
+                
+                executed_actions.append({
+                    'action_type': 'delete_conversation',
+                    'result': 'success',
+                    'reason': action['reason']
+                })
+                logger.info(f"Conversation {conversation_id} deleted by AI request")
+            
+            elif action['action'] == 'archive_current_conversation':
+                # Archive conversation
+                conversation.is_archived = True
+                await db.commit()
+
+                executed_actions.append({
+                    'action_type': 'archive_conversation',
+                    'result': 'success',
+                    'reason': action['reason']
+                })
+                logger.info(f"Conversation {conversation_id} archived by AI request")
+
+            elif action['action'] == 'pin_current_conversation':
+                # Pin conversation
+                conversation.is_pinned = True
+                await db.commit()
+
+                executed_actions.append({
+                    'action_type': 'pin_conversation',
+                    'result': 'success',
+                    'reason': action['reason']
+                })
+                logger.info(f"Conversation {conversation_id} pinned by AI request")
+
+        # Parse AI response for script executions
+        script_executions = parse_script_executions(message.content)
+        if script_executions:
+            try:
+                from app.ai_tools.registry import ToolRegistry
+                ToolRegistry.load_tools()
+                
+                for exec_req in script_executions:
+                    tool_name = exec_req['script']
+                    tool = ToolRegistry.get_tool(tool_name)
+                    
+                    if tool:
+                        logger.info(f"Executing AI Tool {tool_name} with args {exec_req['arguments']}")
+                        try:
+                            # Map arguments
+                            if tool_name == 'run_custom_script':
+                                 if not exec_req['arguments']:
+                                     result = {"error": "Missing script name"}
+                                 else:
+                                     script_name = exec_req['arguments'][0]
+                                     script_args = exec_req['arguments'][1:]
+                                     result = await tool.execute(script_name=script_name, args=script_args)
+                            else:
+                                 # Pass all args as 'args' for now
+                                 result = await tool.execute(args=exec_req['arguments'])
+
+                            executed_actions.append({
+                                'action_type': 'tool_execution',
+                                'description': f"Executed {tool_name}",
+                                'result': result,
+                                'reason': exec_req['reason']
+                            })
+                        except Exception as e:
+                             logger.error(f"Error executing tool {tool_name}: {e}")
+                             executed_actions.append({
+                                'action_type': 'tool_execution',
+                                'description': f"Failed {tool_name}",
+                                'result': {'error': str(e)},
+                                'reason': exec_req['reason']
+                            })
+                    else:
+                        logger.warning(f"AI requested unknown tool: {tool_name}")
+                        executed_actions.append({
+                            'action_type': 'tool_execution_failed',
+                            'description': f"Unknown tool: {tool_name}",
+                            'result': {'error': 'Tool not found'},
+                            'reason': exec_req['reason']
+                        })
+            except Exception as e:
+                logger.error(f"Failed to process script executions: {e}")
+
         # Parse AI response for file modifications
         file_modifications = parse_file_modifications(message.content)
         created_modifications = []
 
-        if file_modifications:
+        if file_modifications and conversation.is_active:
             # Get the first server from conversation or user's servers
             server_id = conversation.server_id
 
@@ -426,7 +581,7 @@ async def chat(
         return AIChatResponse(
             message=message,
             suggested_actions=created_modifications if created_modifications else None,
-            executed_actions=None,
+            executed_actions=executed_actions if executed_actions else None,
             requires_confirmation=len(created_modifications) > 0,
         )
 

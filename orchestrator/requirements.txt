@@ -72,3 +72,4 @@ validators>=0.28.0
 
 # Logging
 loguru>=0.7.2
+psutil>=5.9.0

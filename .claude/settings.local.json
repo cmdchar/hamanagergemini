@@ -41,7 +41,8 @@
       "Bash(del NUL)",
       "Bash(git fetch:*)",
       "Bash(timeout 30 docker logs:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

@@ -6,6 +6,10 @@ Acest document definește standardele de lucru pentru proiectul HA Config Manage
 - **Verificare Pre-Execuție:** Înainte de a începe orice task sau comandă, verifică obligatoriu `progress.md`. Dacă funcționalitatea sau task-ul apare deja ca finalizat, informează utilizatorul despre acest lucru.
 - **Actualizare Progres:** Orice modificare funcțională (cod, infrastructură, configurare) TREBUIE documentată imediat în fișierul `progress.md` din rădăcina proiectului.
 - **Istoric:** `progress.md` servește ca sursă unică de adevăr pentru starea proiectului.
+- **Documentare Completă (NOU):** Orice funcționalitate nouă sau modificare trebuie să fie documentată în trei locuri:
+  1. **README.md**: Documentare tehnică și de ansamblu.
+  2. **Interfață Utilizator (UI):** Adăugare info/help în pagina relevantă pentru ca utilizatorul să știe cum să folosească funcționalitatea.
+  3. **Cunoștințe AI (System Prompt):** Asigură-te că AI-ul știe despre noua funcționalitate și poate răspunde la întrebări despre ea sau o poate executa.
 
 ## 2. Stil de Lucru (Bias for Action)
 - **Proactivitate:** Nu aștepta confirmări pentru pași logici evidenți. Dacă o acțiune este necesară pentru a îndeplini obiectivul curent, execut-o.

@@ -69,6 +69,14 @@ HA Config Manager is a powerful, enterprise-grade platform for managing Home Ass
 ### 🤖 AI & Automation
 - **AI Assistant**: Chat interface powered by Deepseek AI with persistent context
 - **Conversation Management**: View, resume, and manage all past AI conversations
+  - **Pin/Unpin**: Keep important conversations at the top
+  - **Archive**: Organize conversations by archiving completed ones
+  - **Soft Delete**: Remove conversations from view while preserving history
+  - Auto-Naming: Intelligent conversation titling based on content
+- **AI Tools Framework**: Extensible system for AI-executed scripts
+  - **Script Execution**: AI can run custom scripts (Python/Bash) for system tasks
+  - **Secure Sandbox**: Scripts run in restricted directory with validated arguments
+  - **Extensible Registry**: Easy addition of new tools via @ai_tool decorator
 - **File Modification Workflow**: Complete system for AI-proposed changes
   - AI proposes changes in standardized format
   - User reviews changes in diff viewer (unified/split view)

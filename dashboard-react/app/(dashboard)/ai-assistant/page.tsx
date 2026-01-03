@@ -12,7 +12,9 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Loader2, Send, Bot, User, Server, Rocket, Database, RefreshCw, Sparkles, MessageSquare, Plus, Pin, Archive, Trash2, MoreVertical } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Loader2, Send, Bot, User, Server, Rocket, Database, RefreshCw, Sparkles, MessageSquare, Plus, Pin, Archive, Trash2, MoreVertical, HelpCircle } from "lucide-react"
+import { ConversationItem } from "@/components/ai-conversation-item"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
@@ -69,7 +71,7 @@ export default function AIAssistantPage() {
     queryKey: ["ai-conversations"],
     queryFn: async () => {
       const response = await apiClient.get("/ai/conversations", {
-        params: { active_only: false }
+        params: { active_only: true }
       })
       console.log("Conversations loaded:", response.data)
       // Sort: pinned first, then by last_message_at or created_at (newest first)
@@ -260,7 +262,27 @@ export default function AIAssistantPage() {
       queryClient.invalidateQueries({ queryKey: ["ai-messages", conversationId] })
 
       if (data.executed_actions?.length > 0) {
-        toast.success(`Action executed: ${data.executed_actions[0]}`)
+        const deleteAction = data.executed_actions.find((a: any) => a.action_type === 'delete_conversation')
+        if (deleteAction) {
+            toast.success("Conversation deleted by AI")
+            setConversationId(null)
+            setMessages([])
+            return
+        }
+
+        const archiveAction = data.executed_actions.find((a: any) => a.action_type === 'archive_conversation')
+        if (archiveAction) {
+            toast.success("Conversation archived by AI")
+        }
+
+        const pinAction = data.executed_actions.find((a: any) => a.action_type === 'pin_conversation')
+        if (pinAction) {
+            toast.success("Conversation pinned by AI")
+        }
+        
+        // Handle other actions (display description or type)
+        const actionDesc = data.executed_actions[0].description || data.executed_actions[0].action_type || JSON.stringify(data.executed_actions[0])
+        toast.success(`Action executed: ${actionDesc}`)
       }
       if (data.suggested_actions?.length > 0) {
         const modCount = data.suggested_actions.length
@@ -286,11 +308,6 @@ export default function AIAssistantPage() {
     e.preventDefault()
     if (!input.trim()) return
 
-    if (!conversationId) {
-      toast.error("Please create a conversation first by clicking the + button")
-      return
-    }
-
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
@@ -299,7 +316,79 @@ export default function AIAssistantPage() {
     }
 
     setMessages((prev) => [...prev, userMessage])
-    chatMutation.mutate(input)
+    
+    // If no conversation selected, create one first
+    if (!conversationId) {
+      createConversationMutation.mutate(undefined, {
+        onSuccess: (data) => {
+          // After creation, send the message
+          // Note: conversationId state won't be updated immediately in this closure
+          // so we use data.id directly
+          apiClient.post(`/ai/conversations/${data.id}/chat`, {
+            message: input,
+            include_context: true,
+          }).then((response) => {
+             const responseData = response.data
+             setMessages((prev) => [
+              ...prev,
+              {
+                id: responseData.message.id,
+                role: "assistant",
+                content: responseData.message.content,
+                action: responseData.executed_actions?.[0],
+                timestamp: new Date(responseData.message.created_at),
+              },
+            ])
+
+            // Invalidate queries
+            queryClient.invalidateQueries({ queryKey: ["ai-conversations"] })
+            queryClient.invalidateQueries({ queryKey: ["ai-messages", data.id] })
+
+            if (responseData.executed_actions?.length > 0) {
+               const deleteAction = responseData.executed_actions.find((a: any) => a.action_type === 'delete_conversation')
+               if (deleteAction) {
+                   toast.success("Conversation deleted by AI")
+                   setConversationId(null)
+                   setMessages([])
+                   // We created it just to delete it? Okay.
+               } else {
+                   const archiveAction = responseData.executed_actions.find((a: any) => a.action_type === 'archive_conversation')
+                   if (archiveAction) {
+                       toast.success("Conversation archived by AI")
+                   }
+
+                   const pinAction = responseData.executed_actions.find((a: any) => a.action_type === 'pin_conversation')
+                   if (pinAction) {
+                       toast.success("Conversation pinned by AI")
+                   }
+
+                   const actionDesc = responseData.executed_actions[0].description || responseData.executed_actions[0].action_type || JSON.stringify(responseData.executed_actions[0])
+                   toast.success(`Action executed: ${actionDesc}`)
+               }
+            }
+            if (responseData.suggested_actions?.length > 0) {
+              const modCount = responseData.suggested_actions.length
+              toast.success(
+                `AI created ${modCount} file modification${modCount > 1 ? "s" : ""}. Review in AI Modifications.`,
+                {
+                  duration: 10000,
+                  action: {
+                    label: "Review",
+                    onClick: () => (window.location.href = "/ai-modifications"),
+                  },
+                }
+              )
+            }
+          }).catch((error) => {
+             console.error("Chat error:", error)
+             toast.error("Failed to get AI response")
+          })
+        }
+      })
+    } else {
+      chatMutation.mutate(input)
+    }
+    
     setInput("")
   }
 
@@ -333,81 +422,48 @@ export default function AIAssistantPage() {
               </div>
             ) : conversations.length > 0 ? (
               <div className="space-y-1 p-2">
-                {conversations.map((conv) => (
-                  <div
-                    key={conv.id}
-                    onClick={() => setConversationId(conv.id)}
-                    className={cn(
-                      "w-full text-left px-3 py-2 rounded-lg transition-colors group relative cursor-pointer",
-                      "hover:bg-accent",
-                      conversationId === conv.id && "bg-accent border-2 border-primary"
-                    )}
-                  >
-                    <div className="flex items-start gap-2">
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        {conv.is_pinned && <Pin className="h-3 w-3 text-primary fill-primary" />}
-                        <MessageSquare className="h-4 w-4 mt-1" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">{conv.title}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge variant="outline" className="text-xs">
-                            {conv.message_count} msg
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {conv.last_message_at
-                              ? new Date(conv.last_message_at).toLocaleDateString()
-                              : new Date(conv.created_at).toLocaleDateString()}
-                          </span>
+                {conversations.some(c => c.is_archived) && (
+                    <div className="mb-2">
+                        <div className="px-3 py-1 text-xs font-semibold text-muted-foreground flex items-center gap-2 uppercase tracking-wider">
+                             <Archive className="h-3 w-3" />
+                             Archived
                         </div>
-                      </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              togglePinMutation.mutate({ id: conv.id, isPinned: conv.is_pinned })
-                            }}
-                          >
-                            <Pin className="h-4 w-4 mr-2" />
-                            {conv.is_pinned ? "Unpin" : "Pin"}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              toggleArchiveMutation.mutate({ id: conv.id, isArchived: conv.is_archived })
-                            }}
-                          >
-                            <Archive className="h-4 w-4 mr-2" />
-                            {conv.is_archived ? "Unarchive" : "Archive"}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              if (confirm("Are you sure you want to delete this conversation?")) {
-                                deleteConversationMutation.mutate(conv.id)
-                              }
-                            }}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                        <div className="space-y-1 pt-0">
+                            {conversations.filter(c => c.is_archived).map((conv) => (
+                                <ConversationItem
+                                    key={conv.id}
+                                    conversation={conv}
+                                    isSelected={conversationId === conv.id}
+                                    onClick={() => setConversationId(conv.id)}
+                                    onPin={(id, isPinned) => togglePinMutation.mutate({ id, isPinned })}
+                                    onArchive={(id, isArchived) => toggleArchiveMutation.mutate({ id, isArchived })}
+                                    onDelete={(id) => deleteConversationMutation.mutate(id)}
+                                />
+                            ))}
+                        </div>
+                        <Separator className="my-2" />
                     </div>
-                  </div>
-                ))}
+                 )}
+                 
+                 {conversations.some(c => c.is_archived) && conversations.some(c => !c.is_archived) && (
+                    <div className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                        Conversations
+                    </div>
+                 )}
+
+                 <div className="space-y-1">
+                    {conversations.filter(c => !c.is_archived).map((conv) => (
+                        <ConversationItem
+                            key={conv.id}
+                            conversation={conv}
+                            isSelected={conversationId === conv.id}
+                            onClick={() => setConversationId(conv.id)}
+                            onPin={(id, isPinned) => togglePinMutation.mutate({ id, isPinned })}
+                            onArchive={(id, isArchived) => toggleArchiveMutation.mutate({ id, isArchived })}
+                            onDelete={(id) => deleteConversationMutation.mutate(id)}
+                        />
+                    ))}
+                 </div>
               </div>
             ) : (
               <div className="p-8 text-center text-muted-foreground">
@@ -444,6 +500,65 @@ export default function AIAssistantPage() {
               )}
               <span className="ml-2">Refresh Context</span>
             </Button>
+
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="ml-2">
+                  <HelpCircle className="h-4 w-4 mr-2" />
+                  Help
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>AI Assistant Capabilities</DialogTitle>
+                  <DialogDescription>
+                    Learn how to use the AI assistant and manage your conversations.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4" /> Conversation Management
+                    </h3>
+                    <ul className="text-sm text-muted-foreground space-y-2 list-disc pl-4">
+                      <li><strong>Pinning:</strong> Use the <Pin className="h-3 w-3 inline mx-1" /> icon or ask "Pin this chat" to keep important conversations at the top.</li>
+                      <li><strong>Archiving:</strong> Use the <Archive className="h-3 w-3 inline mx-1" /> icon or ask "Archive this chat" to move completed tasks to the Archive folder.</li>
+                      <li><strong>Deleting:</strong> Use the <Trash2 className="h-3 w-3 inline mx-1" /> icon or ask "Delete this chat" to remove a conversation.</li>
+                      <li><strong>Auto-Naming:</strong> The AI automatically generates relevant titles for your conversations.</li>
+                    </ul>
+                  </div>
+                  
+                  <Separator />
+
+                  <div>
+                    <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
+                      <Bot className="h-4 w-4" /> AI Commands
+                    </h3>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      You can give natural language commands to the AI:
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="bg-muted p-2 rounded border">"Archive this conversation"</div>
+                      <div className="bg-muted p-2 rounded border">"Pin this chat"</div>
+                      <div className="bg-muted p-2 rounded border">"Delete this chat"</div>
+                      <div className="bg-muted p-2 rounded border">"Run disk check script"</div>
+                    </div>
+                  </div>
+                  
+                  <Separator />
+
+                  <div>
+                    <h3 className="text-sm font-medium mb-2 flex items-center gap-2">
+                      <Sparkles className="h-4 w-4" /> Advanced Capabilities
+                    </h3>
+                    <ul className="text-sm text-muted-foreground space-y-2 list-disc pl-4">
+                        <li><strong>Script Execution:</strong> The AI can run approved system scripts (e.g., check disk usage, system stats) when requested.</li>
+                        <li><strong>File Modification:</strong> The AI can propose changes to your configuration files, which you can review in a diff viewer before applying.</li>
+                    </ul>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
 
         {/* Context Summary */}
