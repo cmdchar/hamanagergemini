@@ -25,14 +25,25 @@
 
 HA Config Manager is a powerful, enterprise-grade platform for managing Home Assistant deployments and smart home devices. Built with modern technologies, it provides centralized control, automated backups, AI assistance, and comprehensive security features.
 
+### 🎯 What's New (Latest Update)
+
+- **React 19.2 Frontend**: Complete migration from Vue 3 to modern React with Next.js 16
+- **GitHub Integration**: Push AI-generated changes to repositories with PR management
+- **AI File Modifications**: Track all AI-generated code changes with diffs and history
+- **Enhanced AI Assistant**: Persistent context awareness with conversation history
+- **Deployment History**: Complete audit trail of all deployments and changes
+- **WebSocket Terminal**: Real-time command execution and log streaming
+- **Improved Home Assistant Config Management**: Advanced configuration sync and validation
+
 ### Why HA Config Manager?
 
 - 🚀 **Automated Deployment**: Deploy Home Assistant instances with one click
-- 🤖 **AI Assistant**: Natural language control with Deepseek AI integration
+- 🤖 **AI Assistant**: Natural language control with Deepseek AI + file modification tracking
 - 🔐 **Enterprise Security**: AES-256-GCM encryption, audit logs, security events
 - 💾 **Smart Backups**: Automated Node-RED & Zigbee2MQTT backups with scheduling
 - 📡 **Device Management**: Control WLED, FPP, ESPHome devices from one interface
 - 🔄 **OTA Updates**: Wireless firmware updates for ESP32/ESP8266 devices
+- 📤 **GitHub Ready**: Deploy changes directly to repositories with automated PRs
 - 📊 **Complete Audit Trail**: Track every system operation for compliance
 
 ---
@@ -54,10 +65,12 @@ HA Config Manager is a powerful, enterprise-grade platform for managing Home Ass
 - **Zigbee2MQTT**: Configuration and database backups
 
 ### 🤖 AI & Automation
-- **AI Assistant**: Chat interface powered by Deepseek AI
+- **AI Assistant**: Chat interface powered by Deepseek AI with persistent context
 - **Action Execution**: AI can create servers, deploy HA, modify configs
-- **Context Awareness**: Understands current deployment context
+- **Context Awareness**: Understands current deployment context and file modifications
 - **Rollback Support**: Automatic rollback for failed operations
+- **File Modification Tracking**: Track AI-generated code changes with diffs
+- **AI Context Management**: Maintain conversation history with system context
 
 ### 💾 Backup & Restore
 - **Scheduled Backups**: Cron-based automation with retention policies
@@ -71,6 +84,14 @@ HA Config Manager is a powerful, enterprise-grade platform for managing Home Ass
 - **Audit Logging**: System-wide operation tracking
 - **Security Events**: Incident detection and response workflows
 - **Compliance Ready**: GDPR, SOC2 compliance tags
+- **Audit Trails**: Complete tracking of AI modifications and system changes
+
+### 🔄 GitHub Integration
+- **Push to Repository**: Deploy modified files directly to GitHub
+- **PR Management**: Create pull requests from AI-generated changes
+- **Deployment History**: Track all deployments with commit history
+- **Webhook Support**: GitHub webhooks for automated triggers
+- **CI/CD Integration**: Connect to deployment pipelines
 
 ### 📊 Monitoring & Analytics
 - **Real-time Status**: Live device and deployment monitoring
@@ -92,12 +113,14 @@ HA Config Manager is a powerful, enterprise-grade platform for managing Home Ass
 - **AI**: Deepseek API integration
 
 ### Frontend
-- **Framework**: Vue 3 (Composition API)
-- **UI Library**: Vuetify 3 (Material Design)
-- **State Management**: Pinia
-- **Language**: TypeScript
-- **Build Tool**: Vite
+- **Framework**: React 19.2 (latest)
+- **UI Library**: shadcn/ui (Tailwind CSS)
+- **State Management**: Zustand with TypeScript
+- **Language**: TypeScript 5.0+
+- **Build Tool**: Vite with Next.js 16.0+
 - **HTTP Client**: Axios
+- **Styling**: Tailwind CSS with custom components
+- **Real-time**: WebSocket support for live logs and events
 
 ### DevOps
 - **Containerization**: Docker & Docker Compose
@@ -301,8 +324,65 @@ POST /api/v1/backup/schedules
    - "Create a new server at 192.168.1.100"
    - "Deploy Home Assistant 2024.1 on server-1"
    - "Show me all offline ESPHome devices"
-4. Review suggested actions
+   - "Generate a Node-RED flow for sensor monitoring"
+   - "Create a backup schedule for all servers"
+4. Review suggested actions and code changes
 5. Confirm to execute
+
+#### AI File Modifications Tracking
+
+The system tracks all AI-generated code changes with full history:
+
+```bash
+# Get AI file modifications
+GET /api/v1/ai-files/modifications?limit=20
+
+# View specific modification details
+GET /api/v1/ai-files/modifications/{id}
+# Returns: diff, content before/after, timestamp, AI reasoning
+
+# Track modification status
+GET /api/v1/ai-files/modifications/{id}/status
+# Status: pending, applied, failed, reverted
+
+# Revert a modification
+POST /api/v1/ai-files/modifications/{id}/revert
+{
+  "reason": "Does not match requirements"
+}
+```
+
+#### GitHub Integration
+
+Deploy AI-generated changes directly to GitHub:
+
+```bash
+# Get GitHub deployment history
+GET /api/v1/github/deployments?limit=10
+
+# Create PR from AI modifications
+POST /api/v1/github/create-pr
+{
+  "modification_ids": [1, 2, 3],
+  "title": "AI-generated Home Assistant config updates",
+  "description": "Automated configuration changes from AI Assistant",
+  "target_branch": "main"
+}
+
+# Sync with GitHub
+POST /api/v1/github/sync
+{
+  "action": "pull"  # or "push"
+}
+
+# Setup webhook for automatic deployments
+POST /api/v1/webhooks/github
+{
+  "event": "push",
+  "branch": "main",
+  "actions": ["deploy", "restart"]
+}
+```
 
 ### Managing Secrets
 
@@ -411,32 +491,68 @@ ha-config-manager/
 │   │   │       ├── wled.py
 │   │   │       ├── esphome.py
 │   │   │       ├── backup.py
-│   │   │       ├── ai.py
+│   │   │       ├── ai.py                    # AI Assistant API
+│   │   │       ├── ai_files.py              # AI File Modifications
+│   │   │       ├── github.py                # GitHub Integration
+│   │   │       ├── webhooks.py              # Webhook handlers
+│   │   │       ├── ha_config.py             # HA Config Management
+│   │   │       ├── terminal.py              # WebSocket terminal
 │   │   │       └── security.py
 │   │   ├── models/           # SQLAlchemy models
+│   │   │   ├── ai_context.py                # AI Context
+│   │   │   ├── ai_file_modification.py      # File changes
+│   │   │   ├── audit_log.py                 # Audit logs
+│   │   │   └── ...
 │   │   ├── schemas/          # Pydantic schemas
+│   │   │   ├── ai_file_modification.py
+│   │   │   ├── github.py
+│   │   │   └── ...
 │   │   ├── services/         # Business logic
-│   │   ├── integrations/     # External integrations
-│   │   ├── core/             # Config, security, deps
-│   │   └── main.py           # FastAPI application
-│   ├── alembic/              # Database migrations
+│   │   │   ├── ai_chat_service.py           # AI handling
+│   │   │   ├── ai_context_service.py        # Context
+│   │   │   ├── github_deployment_service.py # GitHub
+│   │   │   └── ...
+│   │   ├── integrations/     # External APIs
+│   │   │   ├── deepseek.py
+│   │   │   └── ...
+│   │   ├── utils/
+│   │   │   ├── ssh.py
+│   │   │   └── ...
+│   │   ├── core/
+│   │   └── main.py
+│   ├── alembic/
 │   └── requirements.txt
 │
-├── dashboard/                 # Frontend application
-│   ├── src/
-│   │   ├── views/            # Page components
-│   │   ├── stores/           # Pinia stores
-│   │   ├── components/       # Reusable components
-│   │   ├── router/           # Vue Router
-│   │   ├── services/         # API client
-│   │   ├── App.vue
-│   │   └── main.ts
+├── dashboard-react/           # Frontend (React 19.2)
+│   ├── app/
+│   │   ├── (dashboard)/
+│   │   │   ├── ai-assistant/     # AI Chat
+│   │   │   ├── ai-modifications/ # AI Changes
+│   │   │   ├── github/           # GitHub UI
+│   │   │   ├── deployment-history/
+│   │   │   ├── servers/
+│   │   │   ├── esphome/
+│   │   │   ├── wled/
+│   │   │   └── layout.tsx
+│   │   ├── login/
+│   │   ├── register/
+│   │   └── layout.tsx
+│   ├── components/
+│   │   ├── ai-chat-bubble.tsx
+│   │   ├── diff-viewer.tsx
+│   │   ├── app-sidebar.tsx
+│   │   ├── forms/
+│   │   ├── ui/
+│   │   └── ...
+│   ├── hooks/
+│   ├── store/
+│   ├── lib/
 │   ├── package.json
-│   └── vite.config.ts
+│   └── tsconfig.json
 │
-├── docker-compose.yml         # Docker orchestration
-├── IMPLEMENTATION_DOCUMENTATION.md  # Detailed docs
-└── README.md                  # This file
+├── docker-compose.yml
+├── IMPLEMENTATION_DOCUMENTATION.md
+└── README.md
 ```
 
 ---
