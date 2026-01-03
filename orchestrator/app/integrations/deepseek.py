@@ -73,7 +73,7 @@ class DeepseekAI:
                     f"{self.API_BASE_URL}/chat/completions",
                     headers=headers,
                     json=payload,
-                    timeout=aiohttp.ClientTimeout(total=60),
+                    timeout=aiohttp.ClientTimeout(total=90),
                 ) as response:
                     if response.status == 200:
                         result = await response.json()
@@ -217,28 +217,66 @@ class DeepseekAI:
         Returns:
             str: System prompt
         """
-        base_prompt = """You are an expert Home Assistant configuration assistant integrated into the HA Config Manager system.
+        base_prompt = """You are a Home Assistant configuration assistant. Help with HA config, YAML, automations, integrations, WLED, FPP, Tailscale.
 
-Your role is to help users with:
-- Home Assistant configuration and troubleshooting
-- YAML syntax and best practices
-- Automation creation and optimization
-- Integration setup and configuration
-- Performance optimization
-- Security best practices
-- WLED device configuration
-- Falcon Player (FPP) setup for Christmas lights
-- Tailscale VPN configuration
+IMPORTANT - File Modification Workflow:
+When you need to modify a file, you MUST explain the changes you would make and provide the modified content in this format:
 
-Provide clear, accurate, and actionable advice. When suggesting configurations, always provide complete, working examples in YAML format with proper indentation.
+FILE_MODIFICATION:
+file_path: /path/to/file.yaml
+action: update
+summary: Brief description of changes
+explanation: Detailed explanation of why these changes are needed
+---CONTENT---
+[full modified file content here]
+---END---
 
-Be concise but thorough. If you're unsure about something, say so rather than guessing."""
+The user will review your proposed changes before they are applied to the server. DO NOT tell the user to manually edit files - always use this format to propose changes.
+
+Be concise and helpful."""
 
         if not include_context:
             return base_prompt
 
         # Add context based on conversation type
         context_parts = [base_prompt]
+
+        # Add user infrastructure context
+        try:
+            from app.services.ai_context_service import AIContextService
+            context_service = AIContextService(self.db)
+            user_context = await context_service.update_user_context(conversation.user_id)
+
+            # Minimal context
+            context_parts.append(f"\n\nUser has {user_context.total_servers} server(s).")
+
+            if user_context.servers_summary:
+                for server_id, server_info in user_context.servers_summary.items():
+                    context_parts.append(f"Server {server_id}: {server_info['name']}")
+
+            # Add live file list from servers
+            servers_with_files = await context_service.get_user_servers(conversation.user_id)
+            for server_data in servers_with_files:
+                try:
+                    # List files directly from server
+                    from app.models.server import Server
+                    server_stmt = select(Server).where(Server.id == server_data['id'])
+                    server_result = await self.db.execute(server_stmt)
+                    server = server_result.scalar_one_or_none()
+
+                    if server:
+                        from app.utils.ssh import list_remote_files
+                        files = await list_remote_files(server, server.config_path or '/config')
+
+                        context_parts.append(f"\nFiles on {server.name}:")
+                        for file in files[:20]:  # Limit to 20 files
+                            file_type = "dir" if file.get("is_dir") else "file"
+                            context_parts.append(f"  - {file.get('name')} ({file_type})")
+                except Exception as e:
+                    logger.debug(f"Could not list files from server {server_data['id']}: {e}")
+
+        except Exception as e:
+            logger.warning(f"Failed to load user context: {e}")
 
         # Add server context
         if conversation.server_id:
@@ -247,7 +285,7 @@ Be concise but thorough. If you're unsure about something, say so rather than gu
             )
             server = server_result.scalar_one_or_none()
             if server:
-                context_parts.append(f"\n\nContext: User is asking about server '{server.name}' (Host: {server.host})")
+                context_parts.append(f"\n\nFOCUS: User is asking about server '{server.name}' (Host: {server.host})")
                 if server.ha_version:
                     context_parts.append(f"Home Assistant Version: {server.ha_version}")
 
@@ -259,7 +297,7 @@ Be concise but thorough. If you're unsure about something, say so rather than gu
             deployment = deployment_result.scalar_one_or_none()
             if deployment:
                 context_parts.append(
-                    f"\n\nContext: User is asking about deployment #{deployment.id} (Status: {deployment.status})"
+                    f"\n\nFOCUS: User is asking about deployment #{deployment.id} (Status: {deployment.status})"
                 )
                 if deployment.error_message:
                     context_parts.append(f"Error: {deployment.error_message}")

@@ -7,6 +7,7 @@ import asyncssh
 
 from app.models.server import Server
 from app.utils.logging import logger
+from app.utils.security import decrypt_value
 
 
 class ConfigValidator:
@@ -25,15 +26,36 @@ class ConfigValidator:
         try:
             logger.info(f"Validating configuration on server {server.name}")
 
+            # Prepare connection arguments
+            connect_kwargs = {
+                "host": server.ssh_host or server.host,
+                "port": server.ssh_port or 22,
+                "username": server.ssh_user,
+                "known_hosts": None,
+            }
+
+            if server.ssh_key_path:
+                passphrase = None
+                if server.ssh_key_passphrase:
+                    try:
+                        passphrase = decrypt_value(server.ssh_key_passphrase)
+                    except Exception:
+                        logger.error(f"Failed to decrypt SSH key passphrase for server {server.id}")
+                        return {"success": False, "error": "Failed to decrypt SSH key passphrase. Please update server settings."}
+                
+                real_key_path, real_passphrase = get_usable_key_path(server.ssh_key_path, passphrase)
+                connect_kwargs["client_keys"] = [real_key_path]
+                if real_passphrase:
+                    connect_kwargs["passphrase"] = real_passphrase
+            elif server.ssh_password:
+                try:
+                    connect_kwargs["password"] = decrypt_value(server.ssh_password) if server.ssh_password else None
+                except Exception:
+                    logger.error(f"Failed to decrypt SSH password for server {server.id}")
+                    return {"success": False, "error": "Failed to decrypt SSH password. Please update server settings."}
+
             # Connect to server via SSH
-            async with asyncssh.connect(
-                server.ssh_host or server.host,
-                port=server.ssh_port or 22,
-                username=server.ssh_user,
-                client_keys=[server.ssh_key_path] if server.ssh_key_path else None,
-                password=server.ssh_password,
-                known_hosts=None,
-            ) as conn:
+            async with asyncssh.connect(**connect_kwargs) as conn:
                 # Try HA CLI command first (for HA OS)
                 result = await conn.run("ha core check", check=False, timeout=120)
 

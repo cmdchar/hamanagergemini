@@ -1,74 +1,74 @@
 # FastAPI and ASGI server
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-python-multipart==0.0.6
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
 
 # Database
-sqlalchemy==2.0.25
-alembic==1.13.1
-psycopg2-binary==2.9.9
-asyncpg==0.29.0
+sqlalchemy>=2.0.30
+alembic>=1.13.1
+psycopg2-binary>=2.9.9
+asyncpg>=0.30.0
 
 # Cache and Queue
-redis==5.0.1
-celery==5.3.6
+redis>=5.0.1
+celery>=5.4.0
 
 # Validation and Settings
-pydantic==2.5.3
-pydantic-settings==2.1.0
-email-validator==2.1.0
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+email-validator>=2.1.0
 
 # Authentication and Security
-python-jose[cryptography]==3.3.0
-passlib[argon2]==1.7.4
-argon2-cffi==23.1.0
-cryptography==42.0.0
-pyjwt==2.8.0
+python-jose[cryptography]>=3.3.0
+passlib[argon2]>=1.7.4
+argon2-cffi>=23.1.0
+cryptography>=43.0.0
+pyjwt>=2.8.0
 
 # HTTP Clients
-aiohttp==3.9.1
-httpx==0.26.0
-requests==2.31.0
+aiohttp>=3.10.0
+httpx>=0.27.0
+requests>=2.32.0
 
 # Network Discovery
-aiozeroconf==0.1.5
-zeroconf==0.131.0
+aiozeroconf>=0.1.5
+zeroconf>=0.131.0
 
 # GitHub Integration
-PyGithub==2.1.1
-gitpython==3.1.40
+PyGithub>=2.3.0
+gitpython>=3.1.43
 
 # WebSocket
-websockets==12.0
+websockets>=12.0
 
 # AI Integration (OpenRouter/Deepseek)
-openai==1.6.1
+openai>=1.30.0
 
 # Monitoring
-prometheus-client==0.19.0
+prometheus-client>=0.20.0
 
 # YAML Processing
-pyyaml==6.0.1
-ruamel.yaml==0.18.5
+pyyaml>=6.0.1
+ruamel.yaml>=0.18.6
 
 # SSH and File Transfer
-paramiko==3.4.0
-asyncssh==2.14.1
+paramiko>=3.4.0
+asyncssh>=2.14.2
 
 # Utilities
-aiofiles==23.2.1
-python-dotenv==1.0.0
-tenacity==8.2.3
-pytz==2023.3
-cron-descriptor==1.4.0
-APScheduler==3.10.4
+aiofiles>=23.2.1
+python-dotenv>=1.0.1
+tenacity>=8.3.0
+pytz>=2024.1
+cron-descriptor>=1.4.0
+APScheduler>=3.10.4
 
 # Object Storage
-minio==7.2.3
+minio>=7.2.7
 
 # Data Validation
-python-dateutil==2.8.2
-validators==0.22.0
+python-dateutil>=2.9.0
+validators>=0.28.0
 
 # Logging
-loguru==0.7.2
+loguru>=0.7.2

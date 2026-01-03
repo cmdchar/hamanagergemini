@@ -16,6 +16,9 @@ import {
   FileText,
   LogOut,
   Terminal,
+  Github,
+  History,
+  FileEdit,
 } from "lucide-react"
 import {
   Sidebar,
@@ -35,13 +38,16 @@ import { useRouter } from "next/navigation"
 const navItems = [
   { title: "Dashboard", icon: Home, href: "/dashboard" },
   { title: "Servers", icon: Server, href: "/servers" },
+  { title: "GitHub", icon: Github, href: "/github" },
   { title: "Deployments", icon: Rocket, href: "/deployments" },
+  { title: "Deployment History", icon: History, href: "/deployment-history" },
   { title: "WLED", icon: Lightbulb, href: "/wled" },
   { title: "FPP", icon: Radio, href: "/fpp" },
   { title: "Tailscale", icon: Network, href: "/tailscale" },
   { title: "ESPHome", icon: Cpu, href: "/esphome" },
   { title: "Backups", icon: Database, href: "/backups" },
   { title: "AI Assistant", icon: Bot, href: "/ai-assistant" },
+  { title: "AI Modifications", icon: FileEdit, href: "/ai-modifications" },
   { title: "Secrets", icon: Lock, href: "/secrets" },
   { title: "Audit Logs", icon: FileText, href: "/audit-logs" },
 ]

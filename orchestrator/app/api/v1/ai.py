@@ -1,7 +1,8 @@
 """AI assistant API endpoints."""
 
 import logging
-from typing import List, Optional
+from datetime import datetime
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -10,7 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_current_user, get_db
 from app.integrations.deepseek import DeepseekAI
 from app.models.ai_conversation import AIConversation, AIFeedback, AIMessage, AIPromptTemplate
+from app.models.ai_file_modification import AIFileModification, ModificationAction, ModificationStatus
+from app.models.server import Server
 from app.models.user import User
+import re
 from app.schemas.ai import (
     AIActionExecuteRequest,
     AIActionExecuteResponse,
@@ -263,6 +267,50 @@ async def list_messages(
         )
 
 
+def parse_file_modifications(ai_response: str) -> List[Dict]:
+    """
+    Parse AI response for file modification proposals.
+
+    Format expected:
+    FILE_MODIFICATION:
+    file_path: /path/to/file.yaml
+    action: update
+    summary: Brief description
+    explanation: Detailed explanation
+    ---CONTENT---
+    [file content]
+    ---END---
+    """
+    modifications = []
+
+    # Find all FILE_MODIFICATION blocks
+    pattern = r'FILE_MODIFICATION:\s*\nfile_path:\s*(.+?)\s*\naction:\s*(\w+)\s*\nsummary:\s*(.+?)\s*\nexplanation:\s*(.+?)\s*\n---CONTENT---\s*\n(.*?)\n---END---'
+
+    matches = re.finditer(pattern, ai_response, re.DOTALL | re.MULTILINE)
+
+    for match in matches:
+        file_path = match.group(1).strip()
+        action = match.group(2).strip().lower()
+        summary = match.group(3).strip()
+        explanation = match.group(4).strip()
+        content = match.group(5).strip()
+
+        # Validate action
+        valid_actions = ['create', 'update', 'delete']
+        if action not in valid_actions:
+            action = 'update'
+
+        modifications.append({
+            'file_path': file_path,
+            'action': action,
+            'summary': summary,
+            'explanation': explanation,
+            'content': content,
+        })
+
+    return modifications
+
+
 # Chat endpoint
 @router.post("/conversations/{conversation_id}/chat", response_model=AIChatResponse)
 async def chat(
@@ -303,13 +351,83 @@ async def chat(
                 detail="Failed to get AI response",
             )
 
-        # TODO: Parse AI response for suggested actions
-        # For now, return basic response
+        # Parse AI response for file modifications
+        file_modifications = parse_file_modifications(message.content)
+        created_modifications = []
+
+        if file_modifications:
+            # Get the first server from conversation or user's servers
+            server_id = conversation.server_id
+
+            if not server_id:
+                # Get user's first server as default
+                servers_result = await db.execute(
+                    select(Server).where(Server.id.in_(
+                        select(Server.id).where(Server.id.isnot(None)).limit(1)
+                    ))
+                )
+                first_server = servers_result.scalar_one_or_none()
+                if first_server:
+                    server_id = first_server.id
+
+            if server_id:
+                # Get server for reading original content
+                server_result = await db.execute(select(Server).where(Server.id == server_id))
+                server = server_result.scalar_one_or_none()
+
+                for mod_data in file_modifications:
+                    try:
+                        # Try to read original content
+                        content_before = None
+                        if server and mod_data['action'] == 'update':
+                            from app.utils.ssh import read_remote_file
+                            try:
+                                content_before = await read_remote_file(server, mod_data['file_path'])
+                            except Exception:
+                                pass  # File might not exist yet
+
+                        # Create file modification record
+                        modification = AIFileModification(
+                            user_id=current_user.id,
+                            server_id=server_id,
+                            conversation_id=conversation_id,
+                            message_id=message.id,
+                            file_path=mod_data['file_path'],
+                            action=ModificationAction[mod_data['action'].upper()],
+                            content_before=content_before,
+                            content_after=mod_data['content'],
+                            ai_explanation=mod_data['explanation'],
+                            ai_summary=mod_data['summary'],
+                            status=ModificationStatus.PENDING,
+                        )
+
+                        db.add(modification)
+                        await db.commit()
+                        await db.refresh(modification)
+
+                        created_modifications.append({
+                            'action_type': 'file_modification',
+                            'action_params': {
+                                'modification_id': str(modification.id),
+                                'file_path': modification.file_path,
+                                'action': modification.action,
+                            },
+                            'description': modification.ai_summary or f"Modify {modification.file_path}",
+                            'requires_confirmation': True,
+                            'reversible': True,
+                        })
+
+                        logger.info(f"Created file modification {modification.id} for {modification.file_path}")
+
+                    except Exception as e:
+                        logger.error(f"Failed to create file modification: {e}")
+
+        # Return response with created modifications
         return AIChatResponse(
             message=message,
-            suggested_actions=None,
+            suggested_actions=created_modifications if created_modifications else None,
             executed_actions=None,
-            requires_confirmation=False,
+            requires_confirmation=len(created_modifications) > 0,
         )
 
     except HTTPException:
@@ -636,15 +754,18 @@ async def build_context(
 ):
     """Build AI context from system data."""
     try:
-        # TODO: Implement context building from servers, deployments, integrations
-        # This will gather relevant data to provide to the AI
+        from app.services.ai_context_service import AIContextService
+
+        context_service = AIContextService(db)
+        await context_service.update_user_context(current_user.id)
+        context_data = await context_service.get_context_for_query(current_user.id, data.query or "")
 
         return AIContextResponse(
-            context_summary="Context building not yet implemented",
-            server_info=None,
-            deployment_info=None,
+            context_summary=f"User has {context_data['user_summary']['total_servers']} servers and {context_data['user_summary']['total_deployments']} deployments",
+            server_info=context_data['user_summary']['servers'],
+            deployment_info=context_data['user_summary']['projects'],
             integrations=None,
-            recent_activity=None,
+            recent_activity=context_data['recent_activities'][:5],
         )
 
     except Exception as e:
@@ -652,4 +773,58 @@ async def build_context(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to build context",
+        )
+
+
+@router.get("/user-context")
+async def get_user_full_context(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get comprehensive user context for AI assistant"""
+    try:
+        from app.services.ai_context_service import AIContextService
+
+        context_service = AIContextService(db)
+        context = await context_service.update_user_context(current_user.id)
+
+        return {
+            "total_servers": context.total_servers,
+            "total_deployments": context.total_deployments,
+            "total_backups": context.total_backups,
+            "servers": context.servers_summary,
+            "projects": context.projects_summary,
+            "recent_activities": context.recent_activities[:20],
+        }
+    except Exception as e:
+        logger.exception(f"Failed to get user context: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get user context",
+        )
+
+
+@router.post("/context/refresh")
+async def refresh_user_context(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Force refresh of user context"""
+    try:
+        from app.services.ai_context_service import AIContextService
+
+        context_service = AIContextService(db)
+        context = await context_service.update_user_context(current_user.id)
+
+        return {
+            "status": "refreshed",
+            "total_servers": context.total_servers,
+            "total_deployments": context.total_deployments,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    except Exception as e:
+        logger.exception(f"Failed to refresh context: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to refresh context",
         )

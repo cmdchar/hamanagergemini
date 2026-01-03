@@ -1,0 +1,68 @@
+fix: repair critical issues and add automated startup scripts
+
+BREAKING CHANGES:
+- Backend now runs on port 8081 (changed from 8000)
+- Auth token stored as 'auth_token' in localStorage (changed from 'access_token')
+
+CRITICAL FIXES:
+1. Created missing lib/api.ts with axios configuration
+2. Implemented real SSH + HA API connection testing (removed mock)
+3. Fixed frontend-backend schema mismatch in server form
+4. Removed duplicate functions in servers.py
+5. Created missing orchestrator/.env with secure keys
+6. Fixed missing import in ha_config.py causing 500 errors
+7. Added HA access token field to server form
+8. Created frontend .env.local with API URL
+9. Improved test result display with detailed messages
+
+NEW FEATURES:
+- Automated setup scripts for Windows (START_*.bat)
+- Automated setup scripts for Linux/Mac (start_*.sh)
+- START_ALL.bat - one-click startup for both servers
+- Comprehensive documentation (START_HERE.md, README_QUICK_START.md)
+- Virtual environment auto-creation
+- Dependency auto-installation
+- Health check endpoints verification
+
+IMPROVEMENTS:
+- Enhanced security.py to handle string/bytes encryption keys
+- Added ssh_key_passphrase support for password-protected keys
+- Improved error messages in connection testing
+- Better CORS configuration
+- Detailed startup logs and error handling
+
+FILES ADDED:
+- dashboard-react/lib/api.ts
+- dashboard-react/.env.local
+- orchestrator/.env
+- START_BACKEND.bat
+- START_FRONTEND.bat
+- START_ALL.bat
+- start_backend.sh
+- start_frontend.sh
+- START_HERE.md
+- README_QUICK_START.md
+- FIXES_SUMMARY.md
+- COMMIT_MESSAGE.txt
+
+FILES MODIFIED:
+- dashboard-react/components/forms/server-form.tsx
+- dashboard-react/app/(dashboard)/servers/page.tsx
+- orchestrator/app/api/v1/servers.py
+- orchestrator/app/api/v1/ha_config.py
+- orchestrator/app/utils/security.py (user modification)
+- orchestrator/app/models/server.py (user modification)
+- orchestrator/app/schemas/server.py (user modification)
+
+TECHNICAL DETAILS:
+- Python dependencies: aiohttp, asyncssh (already in requirements.txt)
+- JWT configuration: 60min access tokens, 7 days refresh
+- Database: SQLite (development), PostgreSQL ready
+- Encryption: Fernet symmetric encryption for secrets
+- Connection testing: Real SSH + HA API with latency measurement
+
+CO-AUTHORED-BY:
+- Gemini AI (initial implementation)
+- Claude Sonnet 4.5 (fixes and improvements)
+
+🤖 Generated with Claude Code

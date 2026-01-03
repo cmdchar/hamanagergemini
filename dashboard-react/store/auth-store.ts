@@ -20,18 +20,27 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       token: null,
       setAuth: (user, token) => {
-        localStorage.setItem("auth_token", token)
-        localStorage.setItem("user", JSON.stringify(user))
+        // Also save to separate key for apiClient interceptor
+        if (typeof window !== 'undefined') {
+          localStorage.setItem("auth_token", token)
+        }
         set({ user, token })
       },
       logout: () => {
-        localStorage.removeItem("auth_token")
-        localStorage.removeItem("user")
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem("auth_token")
+        }
         set({ user: null, token: null })
       },
     }),
     {
       name: "auth-storage",
+      // Sync token to localStorage on hydration
+      onRehydrateStorage: () => (state) => {
+        if (state?.token && typeof window !== 'undefined') {
+          localStorage.setItem("auth_token", state.token)
+        }
+      },
     },
   ),
 )

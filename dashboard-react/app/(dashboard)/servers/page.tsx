@@ -25,7 +25,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Plus, Trash2, AlertCircle, CheckCircle, Loader2, TestTube, ExternalLink, FileText } from "lucide-react"
+import { Plus, Trash2, AlertCircle, CheckCircle, Loader2, TestTube, ExternalLink, FileText, Settings } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { ServerForm } from "@/components/forms/server-form"
@@ -76,11 +76,29 @@ export default function ServersPage() {
       return response.data
     },
     onSuccess: (data) => {
-      toast.success(data.message || "Connection successful")
+      if (data.overall_status === "success") {
+        const messages = []
+        if (data.ssh?.status === "success") {
+          messages.push(data.ssh.message)
+        }
+        if (data.ha?.status === "success") {
+          messages.push(data.ha.message)
+        }
+        toast.success(messages.join(" | "))
+      } else {
+        const errors = []
+        if (data.ssh?.status === "failed") {
+          errors.push(data.ssh.message)
+        }
+        if (data.ha?.status === "failed") {
+          errors.push(data.ha.message)
+        }
+        toast.error(errors.join(" | ") || "Connection test failed")
+      }
       queryClient.invalidateQueries({ queryKey: ["servers"] })
     },
-    onError: () => {
-      toast.error("Connection test failed")
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || "Connection test failed")
     },
   })
 
@@ -180,7 +198,11 @@ export default function ServersPage() {
                 <TableBody>
                   {servers.map((server) => (
                     <TableRow key={server.id}>
-                      <TableCell className="font-medium">{server.name}</TableCell>
+                      <TableCell className="font-medium">
+                        <Link href={`/servers/${server.id}`} className="hover:underline text-primary">
+                          {server.name}
+                        </Link>
+                      </TableCell>
                       <TableCell>{server.host}</TableCell>
                       <TableCell>{server.port}</TableCell>
                       <TableCell>{server.username}</TableCell>
@@ -192,6 +214,11 @@ export default function ServersPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
+                          <Link href={`/servers/${server.id}`}>
+                            <Button variant="outline" size="sm" title="Server Dashboard">
+                              <Settings className="h-4 w-4" />
+                            </Button>
+                          </Link>
                           <Button
                             variant="outline"
                             size="sm"

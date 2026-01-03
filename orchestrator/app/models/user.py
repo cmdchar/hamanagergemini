@@ -11,6 +11,7 @@ from app.db.base import Base, TableNameMixin, TimestampMixin
 if TYPE_CHECKING:
     from app.models.security import AuditLog
     from app.models.deployment import Deployment
+    from app.models.ai_context import AIUserContext
 
 
 class User(Base, TableNameMixin, TimestampMixin):
@@ -37,6 +38,9 @@ class User(Base, TableNameMixin, TimestampMixin):
     )
     audit_logs: Mapped[list["AuditLog"]] = relationship(
         "AuditLog", back_populates="user", lazy="selectin"
+    )
+    ai_context: Mapped["AIUserContext"] = relationship(
+        "AIUserContext", back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:

@@ -3,6 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.models.server import Server
 from sqlalchemy import select
+from app.utils.security import decrypt_value
+from app.utils.ssh import get_usable_key_path
 import asyncssh
 import asyncio
 import logging
@@ -54,9 +56,26 @@ async def websocket_endpoint(
         }
 
         if server.ssh_key_path:
-            connect_kwargs["client_keys"] = [server.ssh_key_path]
+            passphrase = None
+            if server.ssh_key_passphrase:
+                try:
+                    passphrase = decrypt_value(server.ssh_key_passphrase)
+                except Exception:
+                    await websocket.send_text("Error: Failed to decrypt SSH key passphrase. Please update server settings.\r\n")
+                    await websocket.close()
+                    return
+            
+            real_key_path, real_passphrase = get_usable_key_path(server.ssh_key_path, passphrase)
+            connect_kwargs["client_keys"] = [real_key_path]
+            if real_passphrase:
+                connect_kwargs["passphrase"] = real_passphrase
         elif server.ssh_password:
-            connect_kwargs["password"] = server.ssh_password
+            try:
+                connect_kwargs["password"] = decrypt_value(server.ssh_password) if server.ssh_password else None
+            except Exception:
+                await websocket.send_text("Error: Failed to decrypt SSH password. Please update server settings.\r\n")
+                await websocket.close()
+                return
         else:
              # Try default keys if nothing specified, or fail
              pass

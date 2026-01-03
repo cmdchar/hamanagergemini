@@ -50,6 +50,8 @@ class Server(Base, TableNameMixin, TimestampMixin):
     # Authentication
     access_token: Mapped[str] = mapped_column(String(500), nullable=True)
     api_key: Mapped[str] = mapped_column(String(255), nullable=True)
+    ha_username: Mapped[str] = mapped_column(String(255), nullable=True)
+    ha_password: Mapped[str] = mapped_column(String(500), nullable=True)  # Encrypted
 
     # SSH details
     ssh_host: Mapped[str] = mapped_column(String(255), nullable=True)
@@ -57,6 +59,11 @@ class Server(Base, TableNameMixin, TimestampMixin):
     ssh_user: Mapped[str] = mapped_column(String(100), nullable=True)
     ssh_key_path: Mapped[str] = mapped_column(String(500), nullable=True)
     ssh_password: Mapped[str] = mapped_column(String(255), nullable=True)  # Encrypted
+    ssh_key_passphrase: Mapped[str] = mapped_column(String(255), nullable=True)  # Encrypted
+
+    # GitHub integration
+    github_repo: Mapped[str] = mapped_column(String(500), nullable=True)
+    github_branch: Mapped[str] = mapped_column(String(255), nullable=True)
 
     # Server info
     server_type: Mapped[ServerType] = mapped_column(

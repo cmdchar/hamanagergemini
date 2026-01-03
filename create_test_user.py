@@ -6,7 +6,7 @@ BASE_URL = "http://localhost:8081/api/v1"
 def create_user():
     username = "admin"
     email = "admin@example.com"
-    password = "Password123!"
+    password = "Admin123!"
     full_name = "Admin User"
 
     print(f"Creating user: {username}")

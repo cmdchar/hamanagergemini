@@ -23,11 +23,16 @@ class ServerCreate(ServerBase):
 
     access_token: Optional[str] = None
     api_key: Optional[str] = None
+    ha_username: Optional[str] = None
+    ha_password: Optional[str] = None
     ssh_host: Optional[str] = None
     ssh_port: int = Field(default=22, ge=1, le=65535)
     ssh_user: Optional[str] = None
     ssh_key_path: Optional[str] = None
     ssh_password: Optional[str] = None
+    ssh_key_passphrase: Optional[str] = None
+    github_repo: Optional[str] = None
+    github_branch: Optional[str] = None
     server_type: ServerType = ServerType.PRODUCTION
     config_path: str = "/config"
     backup_path: Optional[str] = "/backup"
@@ -49,11 +54,16 @@ class ServerUpdate(BaseSchema):
     use_ssl: Optional[bool] = None
     access_token: Optional[str] = None
     api_key: Optional[str] = None
+    ha_username: Optional[str] = None
+    ha_password: Optional[str] = None
     ssh_host: Optional[str] = None
     ssh_port: Optional[int] = Field(None, ge=1, le=65535)
     ssh_user: Optional[str] = None
     ssh_key_path: Optional[str] = None
     ssh_password: Optional[str] = None
+    ssh_key_passphrase: Optional[str] = None
+    github_repo: Optional[str] = None
+    github_branch: Optional[str] = None
     server_type: Optional[ServerType] = None
     status: Optional[ServerStatus] = None
     config_path: Optional[str] = None
@@ -86,8 +96,19 @@ class ServerResponse(ServerBase, TimestampSchema):
     tailscale_hostname: Optional[str] = None
     version: Optional[str] = None
     meta_data: Optional[Dict[str, Any]] = Field(None, serialization_alias="metadata")
-    tags: Optional[List[str]] = None
+    tags: Optional[str] = None
+    ssh_host: Optional[str] = None
+    ssh_port: Optional[int] = None
+    ssh_user: Optional[str] = None
+    ha_username: Optional[str] = None
+    ha_password: Optional[str] = None
+    github_repo: Optional[str] = None
+    github_branch: Optional[str] = None
     url: str
+    ha_url: Optional[str] = None
+    ha_version: Optional[str] = None
+    is_online: bool = False
+    last_check: Optional[str] = None
 
 
 class ServerConnectionTest(BaseSchema):

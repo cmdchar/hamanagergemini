@@ -1,13 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { apiClient } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
-import { RefreshCw, FileText, ArrowLeft, Save } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { RefreshCw, FileText, ArrowLeft, Save, Folder, FolderOpen, ChevronRight, ChevronDown, Search } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import { useParams } from "next/navigation"
@@ -19,24 +20,78 @@ interface HaConfig {
   updated_at: string
 }
 
+interface FileNode {
+  name: string
+  path: string
+  type: 'file' | 'folder'
+  config?: HaConfig
+  children?: FileNode[]
+}
+
+// Build file tree from flat list of configs
+function buildFileTree(configs: HaConfig[]): FileNode[] {
+  const root: Record<string, FileNode> = {}
+
+  configs.forEach(config => {
+    const parts = config.path.replace(/^\/config\//, '').split('/')
+    let current = root
+
+    parts.forEach((part, index) => {
+      const isFile = index === parts.length - 1
+      const fullPath = parts.slice(0, index + 1).join('/')
+
+      if (!current[part]) {
+        current[part] = {
+          name: part,
+          path: `/config/${fullPath}`,
+          type: isFile ? 'file' : 'folder',
+          ...(isFile ? { config } : { children: {} })
+        }
+      }
+
+      if (!isFile) {
+        current = current[part].children as Record<string, FileNode>
+      }
+    })
+  })
+
+  // Convert to array and sort
+  const sortNodes = (nodes: Record<string, FileNode>): FileNode[] => {
+    return Object.values(nodes)
+      .map(node => ({
+        ...node,
+        children: node.children ? sortNodes(node.children as Record<string, FileNode>) : undefined
+      }))
+      .sort((a, b) => {
+        // Folders first, then alphabetically
+        if (a.type !== b.type) return a.type === 'folder' ? -1 : 1
+        return a.name.localeCompare(b.name)
+      })
+  }
+
+  return sortNodes(root)
+}
+
 export default function ServerConfigPage() {
   const params = useParams()
   const serverId = params.id as string
   const [selectedConfig, setSelectedConfig] = useState<HaConfig | null>(null)
   const [editedContent, setEditedContent] = useState<string>("")
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+  const [searchQuery, setSearchQuery] = useState<string>("")
   const queryClient = useQueryClient()
 
   const { data: configs, isLoading } = useQuery<HaConfig[]>({
     queryKey: ["server-configs", serverId],
     queryFn: async () => {
-      const response = await apiClient.get(`/servers/${serverId}/configs`)
+      const response = await apiClient.get(`/ha-config/servers/${serverId}/configs`)
       return response.data
     },
   })
 
   const syncMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiClient.post(`/servers/${serverId}/sync-config`)
+      const response = await apiClient.post(`/ha-config/servers/${serverId}/sync-config`)
       return response.data
     },
     onSuccess: () => {
@@ -51,7 +106,7 @@ export default function ServerConfigPage() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!selectedConfig) return
-      const response = await apiClient.put(`/servers/${serverId}/configs/${selectedConfig.id}`, {
+      const response = await apiClient.put(`/ha-config/servers/${serverId}/configs/${selectedConfig.id}`, {
         content: editedContent
       })
       return response.data
@@ -78,6 +133,109 @@ export default function ServerConfigPage() {
     setEditedContent(config.content)
   }
 
+  const toggleFolder = (path: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev)
+      if (next.has(path)) {
+        next.delete(path)
+      } else {
+        next.add(path)
+      }
+      return next
+    })
+  }
+
+  // Build file tree and filter by search
+  const fileTree = useMemo(() => {
+    if (!configs) return []
+    const tree = buildFileTree(configs)
+
+    if (!searchQuery.trim()) return tree
+
+    // Filter tree by search query
+    const filterTree = (nodes: FileNode[]): FileNode[] => {
+      return nodes.reduce<FileNode[]>((acc, node) => {
+        if (node.type === 'file') {
+          // Check if file matches search
+          if (node.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              node.path.toLowerCase().includes(searchQuery.toLowerCase())) {
+            acc.push(node)
+          }
+        } else if (node.children) {
+          // Recursively filter children
+          const filteredChildren = filterTree(node.children)
+          if (filteredChildren.length > 0) {
+            acc.push({
+              ...node,
+              children: filteredChildren
+            })
+            // Auto-expand folders when searching
+            expandedFolders.add(node.path)
+          }
+        }
+        return acc
+      }, [])
+    }
+
+    return filterTree(tree)
+  }, [configs, searchQuery])
+
+  // Recursive tree node component
+  const TreeNode = ({ node, depth = 0 }: { node: FileNode; depth?: number }) => {
+    const isExpanded = expandedFolders.has(node.path)
+    const isSelected = selectedConfig?.id === node.config?.id
+
+    if (node.type === 'file') {
+      return (
+        <Button
+          variant={isSelected ? "secondary" : "ghost"}
+          className="w-full justify-start font-mono text-xs h-7 px-2"
+          style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}
+          onClick={() => node.config && handleSelectConfig(node.config)}
+          title={node.path}
+        >
+          <FileText className="mr-2 h-3 w-3 shrink-0" />
+          <span className="truncate">{node.name}</span>
+        </Button>
+      )
+    }
+
+    return (
+      <div>
+        <Button
+          variant="ghost"
+          className="w-full justify-start font-mono text-xs h-7 px-2"
+          style={{ paddingLeft: `${depth * 12 + 8}px` }}
+          onClick={() => toggleFolder(node.path)}
+        >
+          {isExpanded ? (
+            <ChevronDown className="mr-1 h-3 w-3 shrink-0" />
+          ) : (
+            <ChevronRight className="mr-1 h-3 w-3 shrink-0" />
+          )}
+          {isExpanded ? (
+            <FolderOpen className="mr-2 h-3 w-3 shrink-0" />
+          ) : (
+            <Folder className="mr-2 h-3 w-3 shrink-0" />
+          )}
+          <span className="truncate">{node.name}</span>
+          {node.children && (
+            <span className="ml-auto text-muted-foreground text-xs">
+              {node.children.length}
+            </span>
+          )}
+        </Button>
+        {isExpanded && node.children && (
+          <div>
+            {node.children.map((child) => (
+              <TreeNode key={child.path} node={child} depth={depth + 1} />
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6 h-[calc(100vh-100px)] flex flex-col">
       <div className="flex items-center justify-between">
@@ -100,28 +258,30 @@ export default function ServerConfigPage() {
 
       <div className="grid grid-cols-12 gap-6 flex-1 min-h-0">
         <Card className="col-span-3 flex flex-col h-full">
-          <CardHeader>
-            <CardTitle className="text-lg">Files</CardTitle>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg mb-2">Files</CardTitle>
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search files..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 h-8 text-sm"
+              />
+            </div>
           </CardHeader>
           <CardContent className="flex-1 overflow-hidden p-0">
             <ScrollArea className="h-full">
-              <div className="space-y-1 p-4">
+              <div className="space-y-0.5 p-2">
                 {isLoading ? (
-                  <p className="text-sm text-muted-foreground">Loading...</p>
+                  <p className="text-sm text-muted-foreground p-2">Loading...</p>
                 ) : configs?.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No configs found. Click Sync.</p>
+                  <p className="text-sm text-muted-foreground p-2">No configs found. Click Sync.</p>
+                ) : fileTree.length === 0 ? (
+                  <p className="text-sm text-muted-foreground p-2">No files match your search.</p>
                 ) : (
-                  configs?.map((config) => (
-                    <Button
-                      key={config.id}
-                      variant={selectedConfig?.id === config.id ? "secondary" : "ghost"}
-                      className="w-full justify-start font-mono text-sm truncate"
-                      onClick={() => handleSelectConfig(config)}
-                      title={config.path}
-                    >
-                      <FileText className="mr-2 h-4 w-4 shrink-0" />
-                      <span className="truncate">{config.path.replace("/config/", "")}</span>
-                    </Button>
+                  fileTree.map((node) => (
+                    <TreeNode key={node.path} node={node} />
                   ))
                 )}
               </div>

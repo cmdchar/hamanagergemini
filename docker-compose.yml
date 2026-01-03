@@ -35,6 +35,12 @@ services:
       - SECRET_KEY=dev-secret-key-change-in-production-min-32-chars
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - SECRETS_MASTER_KEY=dev-master-key-change-in-production-must-be-32-bytes
+      - ENCRYPTION_KEY=KQeZwERanQ4SsHZzwlcjQ53SS19FaKw2rmMiPZZDqQ8=
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}
+      - TAILSCALE_API_KEY=${TAILSCALE_API_KEY}
+      - TAILSCALE_TAILNET=${TAILSCALE_TAILNET}
     restart: unless-stopped
     networks:
       - ha-config-network
@@ -50,6 +56,7 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8081/api/v1
+      - NEXT_PUBLIC_GITHUB_CLIENT_ID=${NEXT_PUBLIC_GITHUB_CLIENT_ID}
     restart: unless-stopped
     networks:
       - ha-config-network

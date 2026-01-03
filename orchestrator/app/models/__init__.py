@@ -17,6 +17,22 @@ from app.models.notification import (
 from app.models.server import Server, ServerStatus, ServerType
 from app.models.snapshot import Snapshot, SnapshotStatus, SnapshotType
 from app.models.user import User
+from app.models.ai_context import (
+    AIUserContext,
+    AIKnowledgeBase,
+    AIActionLog,
+)
+from app.models.ai_conversation import (
+    AIConversation,
+    AIMessage,
+    AIPromptTemplate,
+    AIFeedback,
+)
+from app.models.ai_file_modification import (
+    AIFileModification,
+    ModificationStatus,
+    ModificationAction,
+)
 
 __all__ = [
     # User
@@ -49,4 +65,17 @@ __all__ = [
     "NotificationType",
     "NotificationCategory",
     "NotificationChannel",
+    # AI Context
+    "AIUserContext",
+    "AIKnowledgeBase",
+    "AIActionLog",
+    # AI Conversation
+    "AIConversation",
+    "AIMessage",
+    "AIPromptTemplate",
+    "AIFeedback",
+    # AI File Modification
+    "AIFileModification",
+    "ModificationStatus",
+    "ModificationAction",
 ]

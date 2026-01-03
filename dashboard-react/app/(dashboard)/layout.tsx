@@ -8,6 +8,7 @@ import { useAuthStore } from "@/store/auth-store"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { AppHeader } from "@/components/app-header"
+import { AIChatBubble } from "@/components/ai-chat-bubble"
 
 export default function DashboardLayout({
   children,
@@ -35,6 +36,7 @@ export default function DashboardLayout({
           <AppHeader />
           <main className="flex-1 p-6">{children}</main>
         </div>
+        <AIChatBubble />
       </div>
     </SidebarProvider>
   )

@@ -127,7 +127,7 @@ def get_encryption_key() -> bytes:
     """
     if settings.encryption_key:
         # Use configured key
-        return base64.urlsafe_b64decode(settings.encryption_key)
+        return settings.encryption_key.encode() if isinstance(settings.encryption_key, str) else settings.encryption_key
     else:
         # Generate new key (should be stored in settings for production)
         return Fernet.generate_key()

@@ -11,7 +11,7 @@ class HaConfigCreate(HaConfigBase):
     server_id: int
 
 class HaConfigUpdate(BaseModel):
-    content: Optional[str] = None
+    content: str
 
 class HaConfigResponse(HaConfigBase):
     id: UUID

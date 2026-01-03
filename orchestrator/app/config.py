@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import List, Optional
 
-from pydantic import AnyHttpUrl, Field, validator
+from pydantic import AnyHttpUrl, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,6 +31,7 @@ class Settings(BaseSettings):
 
     # Security
     secret_key: str = Field(..., alias="SECRET_KEY")
+    encryption_key: Optional[str] = Field(default=None, alias="ENCRYPTION_KEY")
     algorithm: str = Field(default="HS256", alias="ALGORITHM")
     access_token_expire_minutes: int = Field(default=30, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
     refresh_token_expire_days: int = Field(default=7, alias="REFRESH_TOKEN_EXPIRE_DAYS")
@@ -77,17 +78,15 @@ class Settings(BaseSettings):
     minio_bucket: str = Field(default="ha-config-backups", alias="MINIO_BUCKET")
 
     # CORS
-    cors_origins: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:8123", "http://127.0.0.1:3000"],
+    cors_origins_str: str = Field(
+        default="http://localhost:3000,http://localhost:8123,http://127.0.0.1:3000",
         alias="CORS_ORIGINS",
     )
 
-    @validator("cors_origins", pre=True)
-    def parse_cors_origins(cls, v):
-        """Parse CORS origins from string or list."""
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
-        return v
+    @property
+    def cors_origins(self) -> List[str]:
+        """Get CORS origins as list."""
+        return [origin.strip() for origin in self.cors_origins_str.split(",")]
 
     # Email
     smtp_host: Optional[str] = Field(default=None, alias="SMTP_HOST")

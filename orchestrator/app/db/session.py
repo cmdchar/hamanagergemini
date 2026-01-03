@@ -62,6 +62,9 @@ async def init_db() -> None:
         snapshot,
         user,
         ha_config,
+        ai_conversation,
+        ai_context,
+        ai_file_modification,
     )
 
     async with engine.begin() as conn:
